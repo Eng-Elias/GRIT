@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  grit:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+      - PORT=8080
+      - CLONE_DIR=/tmp/grit-clones
+      - CLONE_SIZE_THRESHOLD_KB=51200
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  nats-data:

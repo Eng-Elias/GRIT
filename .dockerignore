@@ -1,0 +1,10 @@
+.git/
+.env
+.env.*
+*.md
+specs/
+testdata/
+.specify/
+.windsurf/
+.DS_Store
+Thumbs.db
