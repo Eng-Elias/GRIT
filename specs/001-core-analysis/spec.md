@@ -5,6 +5,16 @@
 **Status**: Draft
 **Input**: User description: "Build the core analysis engine for GRIT — the foundation pillar that all others depend on."
 
+## Clarifications
+
+### Session 2026-03-23
+
+- Q: How should the system clone repositories — shallow or full? → A: Shallow clone (depth=1) for core analysis; full clone deferred to pillars that need history (churn, contributor blame).
+- Q: How should the system handle duplicate concurrent requests for the same uncached repo? → A: Deduplicate — enqueue only one job and have all concurrent requesters share the same job ID.
+- Q: Should cloned repos be deleted immediately after analysis or retained? → A: Retain in a temp directory with a 1-hour TTL for potential reuse by other pillars, then auto-cleanup.
+- Q: What level of observability should the core analysis engine provide? → A: Structured JSON logging plus a Prometheus-compatible `/metrics` endpoint (jobs completed, clone duration, cache hit rate, error rates).
+- Q: Should the GitHub Stats API 202 "computing" response be retried transparently or surfaced to the client? → A: Backend retries transparently with backoff (max 5 attempts, ~30s total); client only sees sub-job progress.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Analyze a Public Repository (Priority: P1)
@@ -216,6 +226,9 @@ error response.
 - What happens when a repository name contains special characters?
   The system MUST validate the `owner/repo` format and reject
   malformed identifiers with HTTP 400.
+- What happens when multiple clients request the same uncached repo
+  simultaneously? The system MUST deduplicate: only one job is
+  enqueued, and all requesters share the same job ID for polling.
 
 ## Requirements *(mandatory)*
 
@@ -226,8 +239,9 @@ error response.
 - **FR-002**: System MUST optionally accept a GitHub personal access
   token via `Authorization: Bearer <token>` header and use it for
   all GitHub API calls when provided.
-- **FR-003**: System MUST clone or shallow-fetch repositories using
-  go-git (no shelling out to the `git` CLI).
+- **FR-003**: System MUST shallow-clone repositories (depth=1) using
+  go-git (no shelling out to the `git` CLI). Full history clones are
+  deferred to pillars that require them (churn, contributor blame).
 - **FR-004**: System MUST walk the entire file tree and count total
   lines, code lines, comment lines, and blank lines per file.
 - **FR-005**: System MUST group and aggregate line counts by
@@ -269,6 +283,24 @@ error response.
   error responses.
 - **FR-018**: System MUST validate the `owner/repo` format and
   reject malformed identifiers with HTTP 400.
+- **FR-019**: System MUST deduplicate concurrent analysis requests
+  for the same repository. If a job is already queued or running,
+  subsequent requests MUST receive the existing job ID rather than
+  enqueuing a duplicate.
+- **FR-020**: System MUST retain cloned repositories in a temporary
+  directory with a 1-hour TTL for potential reuse by other analysis
+  pillars. After TTL expiry, the system MUST automatically delete
+  the clone to reclaim disk space.
+- **FR-021**: System MUST emit structured JSON logs for all operations
+  and expose a Prometheus-compatible `/metrics` endpoint with at
+  minimum: jobs_completed_total, jobs_failed_total,
+  clone_duration_seconds, analysis_duration_seconds,
+  cache_hit_total, cache_miss_total, and github_api_requests_total.
+- **FR-022**: When the GitHub Stats API returns HTTP 202 ("computing"),
+  the system MUST retry transparently with exponential backoff (max
+  5 attempts, ~30s total). This retry behavior MUST NOT be surfaced
+  to the client; the sub-job progress reports "running" until stats
+  are available or retries are exhausted.
 
 ### Key Entities
 
