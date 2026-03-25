@@ -60,6 +60,9 @@ func activeKey(owner, repo, sha string) string {
 }
 
 func (c *Cache) GetAnalysis(ctx context.Context, owner, repo, sha string) ([]byte, error) {
+	if sha == "" {
+		return c.findAnalysis(ctx, owner, repo)
+	}
 	data, err := c.client.Get(ctx, coreKey(owner, repo, sha)).Bytes()
 	if errors.Is(err, redis.Nil) {
 		return nil, ErrCacheMiss
@@ -68,6 +71,32 @@ func (c *Cache) GetAnalysis(ctx context.Context, owner, repo, sha string) ([]byt
 		return nil, fmt.Errorf("cache: get analysis: %w", err)
 	}
 	return data, nil
+}
+
+func (c *Cache) findAnalysis(ctx context.Context, owner, repo string) ([]byte, error) {
+	pattern := fmt.Sprintf("%s/%s:*:core", owner, repo)
+	var cursor uint64
+	for {
+		keys, next, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("cache: scan analysis: %w", err)
+		}
+		if len(keys) > 0 {
+			data, err := c.client.Get(ctx, keys[0]).Bytes()
+			if errors.Is(err, redis.Nil) {
+				return nil, ErrCacheMiss
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cache: get analysis: %w", err)
+			}
+			return data, nil
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil, ErrCacheMiss
 }
 
 func (c *Cache) SetAnalysis(ctx context.Context, owner, repo, sha string, data []byte) error {

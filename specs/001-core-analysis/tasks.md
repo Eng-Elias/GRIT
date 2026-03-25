@@ -96,7 +96,7 @@
 
 - [x] T035 [US2] Enhance worker in internal/job/worker.go — update JobProgress sub-job statuses in Redis as each step starts and completes (clone→running→completed, file_walk→running→completed, etc.); on failure, mark failed sub-job and set overall status to "failed" with error message
 - [x] T036 [US2] Enhance status handler in internal/handler/status.go — return full JobProgress object in response per contracts/api.md; include result_url on completion; include error field on failure
-- [ ] T037 [US2] Write unit tests for job progress tracking in internal/job/worker_test.go — mock analyzer with step callbacks; verify Redis job state transitions: queued→running(clone)→running(file_walk)→completed; verify failed sub-job propagates to overall failed status
+- [x] T037 [US2] Write unit tests for job progress tracking in internal/job/worker_test.go — mock analyzer with step callbacks; verify Redis job state transitions: queued→running(clone)→running(file_walk)→completed; verify failed sub-job propagates to overall failed status
 
 **Checkpoint**: User Stories 1 AND 2 complete — async polling flow works independently
 
@@ -128,8 +128,8 @@
 
 - [x] T041 [US4] Implement DELETE /api/:owner/:repo/cache handler in internal/handler/cache.go — validate owner/repo; call cache.Delete for the repo's result key pattern {owner}/{repo}:*:core; return 204 (idempotent, even if no entry existed)
 - [x] T042 [US4] Enhance analysis handler in internal/handler/analysis.go — ensure all 200 responses include cached:true, cached_at timestamp in body; ensure 202 responses include cached:false; set X-Cache header on all analysis responses
-- [ ] T043 [US4] Write unit tests for cache handler in internal/handler/cache_test.go — verify DELETE returns 204; verify cache key is removed; verify idempotent behavior on missing key
-- [ ] T044 [US4] Write unit tests for cache status fields in internal/handler/analysis_test.go — verify cached/cached_at fields in 200 response; verify X-Cache:HIT header on cached response; verify X-Cache:MISS on 202
+- [x] T043 [US4] Write unit tests for cache handler in internal/handler/cache_test.go — verify DELETE returns 204; verify cache key is removed; verify idempotent behavior on missing key
+- [x] T044 [US4] Write unit tests for cache status fields in internal/handler/analysis_test.go — verify cached/cached_at fields in 200 response; verify X-Cache:HIT header on cached response; verify X-Cache:MISS on 202
 
 **Checkpoint**: Cache management works independently
 
@@ -163,7 +163,7 @@
 - [x] T049 [US6] Implement 5-minute analysis timeout in internal/job/worker.go — wrap analyzer.Analyze() call with context.WithTimeout(ctx, 5*time.Minute); on timeout, return 504 analysis_timeout with partial results if any sub-jobs completed
 - [x] T050 [US6] Implement service availability checks in internal/handler/analysis.go — check Redis and NATS connectivity before processing; return 503 service_unavailable with message identifying which service is down; implement Redis fallback: if Redis is down, process without cache and log warning
 - [x] T051 [US6] Write unit tests for error handling in internal/handler/analysis_test.go — table-driven: malformed input→400, nonexistent repo→404, rate limited→429 with Retry-After, service unavailable→503; verify all use consistent error envelope
-- [ ] T052 [US6] Write unit test for analysis timeout in internal/job/worker_test.go — mock slow analyzer exceeding 5 min; verify 504 response with partial results
+- [x] T052 [US6] Write unit test for analysis timeout in internal/job/worker_test.go — mock slow analyzer exceeding 5 min; verify 504 response with partial results
 
 **Checkpoint**: All error conditions handled with structured responses
 
@@ -177,8 +177,8 @@
 - [x] T054 [P] Implement clone cleanup goroutine in internal/clone/clone.go — background goroutine that scans CloneDir every 10 minutes and deletes directories older than 1 hour per FR-020
 - [x] T055 [P] Implement job deduplication check in internal/handler/analysis.go — before publishing new job, check active:{owner}/{repo}:{sha} Redis key; if exists, return existing job_id per FR-019; clear active key on job completion in worker
 - [x] T056 Wire Prometheus /metrics endpoint in cmd/grit/main.go — mount promhttp.Handler() on chi router at /metrics path
-- [ ] T057 Run quickstart.md verification checklist — start docker compose, execute all 8 curl commands from quickstart.md, verify expected responses
-- [ ] T058 [P] Write integration test in internal/analysis/core/analyzer_test.go — end-to-end test using testdata/fixture-repo (no external calls); verify complete AnalysisResult structure, line counts match manual count, language detection correct
+- [x] T057 Run quickstart.md verification checklist — start docker compose, execute all 8 curl commands from quickstart.md, verify expected responses
+- [x] T058 [P] Write integration test in internal/analysis/core/analyzer_test.go — end-to-end test using testdata/fixture-repo (no external calls); verify complete AnalysisResult structure, line counts match manual count, language detection correct
 
 ---
 

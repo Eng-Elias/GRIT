@@ -114,11 +114,11 @@ go test ./internal/... -v -tags=integration
 
 ## Verification Checklist
 
-- [ ] `GET /api/sindresorhus/is` returns 202 on first request
-- [ ] `GET /api/sindresorhus/is/status` shows sub-job progress
-- [ ] Second `GET /api/sindresorhus/is` returns 200 with cached result
-- [ ] Response includes `X-Cache: HIT` header on cached request
-- [ ] `GET /api/sindresorhus/is/badge` returns valid shields.io JSON
-- [ ] `DELETE /api/sindresorhus/is/cache` returns 204
-- [ ] `GET /api/nonexistent/repo` returns 404 with error envelope
-- [ ] `GET /metrics` returns Prometheus metrics
+- [x] `GET /api/sindresorhus/is` returns 202 on first request
+- [x] `GET /api/sindresorhus/is/status` shows sub-job progress
+- [x] Second `GET /api/sindresorhus/is` returns 200 with cached result
+- [x] Response includes `X-Cache: HIT` header on cached request
+- [x] `GET /api/sindresorhus/is/badge` returns valid shields.io JSON
+- [x] `DELETE /api/sindresorhus/is/cache` returns 204
+- [x] `GET /api/nonexistent/repo` returns 404 with error envelope
+- [x] `GET /metrics` returns Prometheus metrics
