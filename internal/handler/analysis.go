@@ -53,6 +53,10 @@ func (h *AnalysisHandler) HandleAnalysis(w http.ResponseWriter, r *http.Request)
 	sha, cachedData, err := h.tryCache(r.Context(), owner, repo)
 	if err == nil && cachedData != nil {
 		gritmetrics.CacheHitTotal.Inc()
+
+		// Embed complexity_summary into core response.
+		cachedData = h.embedComplexitySummary(r.Context(), owner, repo, cachedData)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
 		w.WriteHeader(http.StatusOK)
@@ -116,6 +120,40 @@ func (h *AnalysisHandler) tryCache(ctx context.Context, owner, repo string) (str
 	}
 
 	return result.Repository.LatestSHA, enriched, nil
+}
+
+func (h *AnalysisHandler) embedComplexitySummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.ComplexitySummary{
+		Status:        "pending",
+		ComplexityURL: fmt.Sprintf("/api/%s/%s/complexity", owner, repo),
+	}
+
+	complexityData, err := h.cache.GetComplexity(ctx, owner, repo, "")
+	if err == nil && complexityData != nil {
+		var cr models.ComplexityResult
+		if json.Unmarshal(complexityData, &cr) == nil {
+			summary.Status = "complete"
+			summary.MeanComplexity = cr.MeanComplexity
+			summary.TotalFunctionCount = cr.TotalFunctionCount
+			summary.HotFileCount = len(cr.HotFiles)
+		}
+	}
+
+	// Merge complexity_summary into the core JSON object.
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["complexity_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
 }
 
 func extractToken(r *http.Request) string {

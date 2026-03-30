@@ -74,7 +74,7 @@ func TestWorker_UpdateJobStatus(t *testing.T) {
 
 	js := skipIfNoNATS(t)
 	analyzer := core.NewAnalyzer("/tmp/grit-test", 51200)
-	w := NewWorker(js, analyzer, c)
+	w := NewWorker(js, analyzer, c, nil)
 
 	w.updateJobStatus(ctx, jobID, models.JobStatusRunning, nil)
 
@@ -106,7 +106,7 @@ func TestWorker_UpdateJobProgress(t *testing.T) {
 
 	js := skipIfNoNATS(t)
 	analyzer := core.NewAnalyzer("/tmp/grit-test", 51200)
-	w := NewWorker(js, analyzer, c)
+	w := NewWorker(js, analyzer, c, nil)
 
 	w.updateJobProgress(ctx, jobID, "clone", models.SubJobRunning)
 
@@ -145,7 +145,7 @@ func TestWorker_UpdateJobCompletion_Success(t *testing.T) {
 
 	js := skipIfNoNATS(t)
 	analyzer := core.NewAnalyzer("/tmp/grit-test", 51200)
-	w := NewWorker(js, analyzer, c)
+	w := NewWorker(js, analyzer, c, nil)
 
 	now := time.Now().UTC()
 	w.updateJobCompletion(ctx, jobID, models.JobStatusCompleted, &now, "")
@@ -183,7 +183,7 @@ func TestWorker_TimeoutSetsFailedStatus(t *testing.T) {
 
 	js := skipIfNoNATS(t)
 	analyzer := core.NewAnalyzer("/tmp/grit-test", 51200)
-	w := NewWorker(js, analyzer, c)
+	w := NewWorker(js, analyzer, c, nil)
 
 	now := time.Now().UTC()
 	w.updateJobCompletion(ctx, jobID, models.JobStatusFailed, &now, "context deadline exceeded")
@@ -217,7 +217,7 @@ func TestWorker_UpdateJobCompletion_Failed(t *testing.T) {
 
 	js := skipIfNoNATS(t)
 	analyzer := core.NewAnalyzer("/tmp/grit-test", 51200)
-	w := NewWorker(js, analyzer, c)
+	w := NewWorker(js, analyzer, c, nil)
 
 	now := time.Now().UTC()
 	w.updateJobCompletion(ctx, jobID, models.JobStatusFailed, &now, "clone failed: timeout")

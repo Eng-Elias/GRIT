@@ -15,6 +15,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/grit-app/grit/internal/analysis/complexity"
 	"github.com/grit-app/grit/internal/analysis/core"
 	"github.com/grit-app/grit/internal/cache"
 	"github.com/grit-app/grit/internal/clone"
@@ -61,7 +62,10 @@ func main() {
 
 	analyzer := core.NewAnalyzer(cfg.CloneDir, cfg.CloneSizeThresholdKB)
 	publisher := job.NewPublisher(js, redisCache)
-	worker := job.NewWorker(js, analyzer, redisCache)
+	worker := job.NewWorker(js, analyzer, redisCache, publisher)
+
+	complexityAnalyzer := complexity.NewAnalyzer()
+	complexityWorker := job.NewComplexityWorker(js, complexityAnalyzer, redisCache, cfg.CloneDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,7 +74,13 @@ func main() {
 		slog.Error("failed to start worker", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("worker started")
+	slog.Info("core worker started")
+
+	if err := complexityWorker.Start(ctx); err != nil {
+		slog.Error("failed to start complexity worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("complexity worker started")
 
 	clone.StartCleanup(ctx, cfg.CloneDir, 1*time.Hour, 10*time.Minute)
 	slog.Info("clone cleanup goroutine started")
@@ -79,6 +89,7 @@ func main() {
 	statusHandler := handler.NewStatusHandler(redisCache)
 	cacheHandler := handler.NewCacheHandler(redisCache)
 	badgeHandler := handler.NewBadgeHandler(redisCache)
+	complexityHandler := handler.NewComplexityHandler(redisCache)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -92,6 +103,7 @@ func main() {
 		r.Get("/", analysisHandler.HandleAnalysis)
 		r.Get("/status", statusHandler.HandleStatus)
 		r.Get("/badge", badgeHandler.HandleBadge)
+		r.Get("/complexity", complexityHandler.HandleComplexity)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 

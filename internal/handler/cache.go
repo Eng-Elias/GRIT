@@ -27,6 +27,7 @@ func (h *CacheHandler) HandleDeleteCache(w http.ResponseWriter, r *http.Request)
 	}
 
 	_ = h.cache.DeleteAnalysis(r.Context(), owner, repo)
+	_ = h.cache.DeleteComplexity(r.Context(), owner, repo)
 
 	w.WriteHeader(http.StatusNoContent)
 }

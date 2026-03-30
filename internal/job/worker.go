@@ -16,16 +16,18 @@ import (
 )
 
 type Worker struct {
-	js       nats.JetStreamContext
-	analyzer *core.Analyzer
-	cache    *cache.Cache
+	js        nats.JetStreamContext
+	analyzer  *core.Analyzer
+	cache     *cache.Cache
+	publisher *Publisher
 }
 
-func NewWorker(js nats.JetStreamContext, analyzer *core.Analyzer, c *cache.Cache) *Worker {
+func NewWorker(js nats.JetStreamContext, analyzer *core.Analyzer, c *cache.Cache, publisher *Publisher) *Worker {
 	return &Worker{
-		js:       js,
-		analyzer: analyzer,
-		cache:    c,
+		js:        js,
+		analyzer:  analyzer,
+		cache:     c,
+		publisher: publisher,
 	}
 }
 
@@ -116,6 +118,16 @@ func (w *Worker) processMessage(ctx context.Context, msg *nats.Msg) {
 		"total_files", result.TotalFiles,
 		"total_lines", result.TotalLines,
 	)
+
+	// Auto-trigger complexity analysis after core completion.
+	if w.publisher != nil {
+		compJobID, err := w.publisher.PublishComplexity(ctx, payload.Owner, payload.Repo, result.Repository.LatestSHA, payload.Token)
+		if err != nil {
+			slog.Error("worker: failed to publish complexity job", "job_id", payload.JobID, "error", err)
+		} else {
+			slog.Info("worker: complexity job enqueued", "core_job_id", payload.JobID, "complexity_job_id", compJobID)
+		}
+	}
 
 	msg.Ack()
 }
