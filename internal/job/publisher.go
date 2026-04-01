@@ -17,6 +17,7 @@ const (
 	StreamName        = "GRIT"
 	Subject           = "grit.jobs.analysis"
 	ComplexitySubject = "grit.jobs.complexity"
+	ChurnSubject      = "grit.jobs.churn"
 )
 
 type JobPayload struct {
@@ -103,6 +104,60 @@ func (p *Publisher) PublishComplexity(ctx context.Context, owner, repo, sha, tok
 
 	if err := p.cache.SetActiveComplexityJob(ctx, owner, repo, sha, jobID); err != nil {
 		return "", fmt.Errorf("job: store active complexity job: %w", err)
+	}
+
+	return jobID, nil
+}
+
+func (p *Publisher) PublishChurn(ctx context.Context, owner, repo, sha, token string) (string, error) {
+	existing, err := p.cache.GetActiveChurnJob(ctx, owner, repo, sha)
+	if err == nil && existing != "" {
+		return existing, nil
+	}
+
+	jobID := uuid.New().String()
+
+	payload := JobPayload{
+		JobID: jobID,
+		Owner: owner,
+		Repo:  repo,
+		SHA:   sha,
+		Token: token,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("job: marshal churn payload: %w", err)
+	}
+
+	msg := &nats.Msg{
+		Subject: ChurnSubject,
+		Data:    data,
+		Header:  nats.Header{},
+	}
+	msg.Header.Set("Nats-Msg-Id", fmt.Sprintf("%s/%s:%s:churn", owner, repo, sha))
+
+	_, err = p.js.PublishMsg(msg, nats.Context(ctx))
+	if err != nil {
+		return "", fmt.Errorf("job: publish churn: %w", err)
+	}
+
+	job := models.AnalysisJob{
+		JobID:     jobID,
+		Owner:     owner,
+		Repo:      repo,
+		SHA:       sha,
+		Status:    models.JobStatusQueued,
+		Progress:  models.NewJobProgress(),
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := p.cache.SetJob(ctx, jobID, &job); err != nil {
+		return "", fmt.Errorf("job: store churn job state: %w", err)
+	}
+
+	if err := p.cache.SetActiveChurnJob(ctx, owner, repo, sha, jobID); err != nil {
+		return "", fmt.Errorf("job: store active churn job: %w", err)
 	}
 
 	return jobID, nil

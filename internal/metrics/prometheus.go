@@ -48,4 +48,10 @@ var (
 		Help:    "End-to-end complexity analysis duration",
 		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
 	})
+
+	ChurnAnalysisDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "grit_churn_analysis_duration_seconds",
+		Help:    "End-to-end churn analysis duration",
+		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
+	})
 )

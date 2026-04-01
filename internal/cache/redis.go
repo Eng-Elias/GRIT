@@ -15,6 +15,7 @@ var ErrCacheMiss = errors.New("cache: miss")
 const (
 	CoreAnalysisTTL       = 24 * time.Hour
 	ComplexityAnalysisTTL = 24 * time.Hour
+	ChurnAnalysisTTL      = 24 * time.Hour
 	JobTTL                = 1 * time.Hour
 	ActiveJobTTL          = 10 * time.Minute
 )
@@ -229,4 +230,84 @@ func (c *Cache) SetActiveComplexityJob(ctx context.Context, owner, repo, sha, jo
 
 func (c *Cache) DeleteActiveComplexityJob(ctx context.Context, owner, repo, sha string) error {
 	return c.client.Del(ctx, activeComplexityKey(owner, repo, sha)).Err()
+}
+
+func churnKey(owner, repo, sha string) string {
+	return fmt.Sprintf("%s/%s:%s:churn", owner, repo, sha)
+}
+
+func activeChurnKey(owner, repo, sha string) string {
+	return fmt.Sprintf("active:%s/%s:%s:churn", owner, repo, sha)
+}
+
+func (c *Cache) GetChurn(ctx context.Context, owner, repo, sha string) ([]byte, error) {
+	if sha == "" {
+		return c.findChurn(ctx, owner, repo)
+	}
+	data, err := c.client.Get(ctx, churnKey(owner, repo, sha)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrCacheMiss
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cache: get churn: %w", err)
+	}
+	return data, nil
+}
+
+func (c *Cache) findChurn(ctx context.Context, owner, repo string) ([]byte, error) {
+	pattern := fmt.Sprintf("%s/%s:*:churn", owner, repo)
+	var cursor uint64
+	for {
+		keys, next, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("cache: scan churn: %w", err)
+		}
+		if len(keys) > 0 {
+			data, err := c.client.Get(ctx, keys[0]).Bytes()
+			if errors.Is(err, redis.Nil) {
+				return nil, ErrCacheMiss
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cache: get churn: %w", err)
+			}
+			return data, nil
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil, ErrCacheMiss
+}
+
+func (c *Cache) SetChurn(ctx context.Context, owner, repo, sha string, data []byte) error {
+	return c.client.Set(ctx, churnKey(owner, repo, sha), data, ChurnAnalysisTTL).Err()
+}
+
+func (c *Cache) DeleteChurn(ctx context.Context, owner, repo string) error {
+	pattern := fmt.Sprintf("%s/%s:*:churn", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		c.client.Del(ctx, iter.Val())
+	}
+	return iter.Err()
+}
+
+func (c *Cache) GetActiveChurnJob(ctx context.Context, owner, repo, sha string) (string, error) {
+	jobID, err := c.client.Get(ctx, activeChurnKey(owner, repo, sha)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrCacheMiss
+	}
+	if err != nil {
+		return "", fmt.Errorf("cache: get active churn job: %w", err)
+	}
+	return jobID, nil
+}
+
+func (c *Cache) SetActiveChurnJob(ctx context.Context, owner, repo, sha, jobID string) error {
+	return c.client.Set(ctx, activeChurnKey(owner, repo, sha), jobID, ActiveJobTTL).Err()
+}
+
+func (c *Cache) DeleteActiveChurnJob(ctx context.Context, owner, repo, sha string) error {
+	return c.client.Del(ctx, activeChurnKey(owner, repo, sha)).Err()
 }
