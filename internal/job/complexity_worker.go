@@ -17,19 +17,21 @@ import (
 
 // ComplexityWorker processes complexity analysis jobs from the NATS queue.
 type ComplexityWorker struct {
-	js       nats.JetStreamContext
-	analyzer *complexity.Analyzer
-	cache    *cache.Cache
-	cloneDir string
+	js        nats.JetStreamContext
+	analyzer  *complexity.Analyzer
+	cache     *cache.Cache
+	cloneDir  string
+	publisher *Publisher
 }
 
 // NewComplexityWorker creates a new complexity worker.
-func NewComplexityWorker(js nats.JetStreamContext, analyzer *complexity.Analyzer, c *cache.Cache, cloneDir string) *ComplexityWorker {
+func NewComplexityWorker(js nats.JetStreamContext, analyzer *complexity.Analyzer, c *cache.Cache, cloneDir string, publisher *Publisher) *ComplexityWorker {
 	return &ComplexityWorker{
-		js:       js,
-		analyzer: analyzer,
-		cache:    c,
-		cloneDir: cloneDir,
+		js:        js,
+		analyzer:  analyzer,
+		cache:     c,
+		cloneDir:  cloneDir,
+		publisher: publisher,
 	}
 }
 
@@ -147,6 +149,16 @@ func (cw *ComplexityWorker) processMessage(ctx context.Context, msg *nats.Msg) {
 		"total_functions", result.TotalFunctionCount,
 		"duration", duration,
 	)
+
+	// Auto-trigger churn analysis after complexity completion.
+	if cw.publisher != nil {
+		churnJobID, err := cw.publisher.PublishChurn(ctx, payload.Owner, payload.Repo, payload.SHA, payload.Token)
+		if err != nil {
+			slog.Error("complexity worker: failed to publish churn job", "job_id", payload.JobID, "error", err)
+		} else {
+			slog.Info("complexity worker: churn job enqueued", "complexity_job_id", payload.JobID, "churn_job_id", churnJobID)
+		}
+	}
 
 	msg.Ack()
 }

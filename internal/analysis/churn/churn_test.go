@@ -48,6 +48,10 @@ func createTestRepo(t *testing.T, commitCount int) *git.Repository {
 	return repo
 }
 
+func createEmptyRepo(dir string) (*git.Repository, error) {
+	return git.PlainInit(dir, false)
+}
+
 func TestWalkCommitLog_BasicCounting(t *testing.T) {
 	repo := createTestRepo(t, 10)
 

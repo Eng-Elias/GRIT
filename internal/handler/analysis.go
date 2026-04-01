@@ -54,8 +54,9 @@ func (h *AnalysisHandler) HandleAnalysis(w http.ResponseWriter, r *http.Request)
 	if err == nil && cachedData != nil {
 		gritmetrics.CacheHitTotal.Inc()
 
-		// Embed complexity_summary into core response.
+		// Embed complexity_summary and churn_summary into core response.
 		cachedData = h.embedComplexitySummary(r.Context(), owner, repo, cachedData)
+		cachedData = h.embedChurnSummary(r.Context(), owner, repo, cachedData)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
@@ -149,6 +150,39 @@ func (h *AnalysisHandler) embedComplexitySummary(ctx context.Context, owner, rep
 		return coreData
 	}
 	raw["complexity_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
+}
+
+func (h *AnalysisHandler) embedChurnSummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.ChurnSummary{
+		Status:         "pending",
+		ChurnMatrixURL: fmt.Sprintf("/api/%s/%s/churn-matrix", owner, repo),
+	}
+
+	churnData, err := h.cache.GetChurn(ctx, owner, repo, "")
+	if err == nil && churnData != nil {
+		var cr models.ChurnMatrixResult
+		if json.Unmarshal(churnData, &cr) == nil {
+			summary.Status = "complete"
+			summary.TotalFiles = cr.TotalFilesChurned
+			summary.CriticalCount = cr.CriticalCount
+			summary.StaleCount = cr.StaleCount
+		}
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["churn_summary"] = summaryJSON
 	merged, err := json.Marshal(raw)
 	if err != nil {
 		return coreData

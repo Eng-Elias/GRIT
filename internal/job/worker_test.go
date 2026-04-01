@@ -252,7 +252,7 @@ func TestComplexityWorker_UpdateJobStatus(t *testing.T) {
 	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
 
 	js := skipIfNoNATS(t)
-	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test", nil)
 
 	cw.updateJobStatus(ctx, jobID, models.JobStatusRunning)
 
@@ -281,7 +281,7 @@ func TestComplexityWorker_UpdateJobCompletion_Success(t *testing.T) {
 	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
 
 	js := skipIfNoNATS(t)
-	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test", nil)
 
 	now := time.Now().UTC()
 	cw.updateJobCompletion(ctx, jobID, models.JobStatusCompleted, &now, "")
@@ -314,7 +314,7 @@ func TestComplexityWorker_UpdateJobCompletion_Failed(t *testing.T) {
 	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
 
 	js := skipIfNoNATS(t)
-	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test", nil)
 
 	now := time.Now().UTC()
 	cw.updateJobCompletion(ctx, jobID, models.JobStatusFailed, &now, "core analysis result not found")
