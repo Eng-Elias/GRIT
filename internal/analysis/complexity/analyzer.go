@@ -54,12 +54,20 @@ func (a *Analyzer) Analyze(
 	pool := NewPool(cloneDir)
 	fileResults := pool.Run(ctx, inputs)
 
+	if ctx.Err() != nil {
+		slog.Warn("complexity: context cancelled, returning partial results",
+			"files_parsed", len(fileResults),
+			"files_total", len(inputs),
+			"error", ctx.Err(),
+		)
+	}
+
 	slog.Info("complexity: parsing complete",
 		"files_parsed", len(fileResults),
 		"files_skipped", len(inputs)-len(fileResults),
 	)
 
-	// Build aggregated result.
+	// Build aggregated result (may be partial if context was cancelled).
 	result := BuildResult(repo, fileResults)
 	return &result, nil
 }

@@ -232,3 +232,122 @@ func TestWorker_UpdateJobCompletion_Failed(t *testing.T) {
 	assert.Equal(t, "clone failed: timeout", job.Error)
 	assert.Empty(t, job.ResultURL, "failed jobs should not have result_url")
 }
+
+// --- Complexity Worker Tests ---
+
+func TestComplexityWorker_UpdateJobStatus(t *testing.T) {
+	c := skipIfNoRedis(t)
+	ctx := context.Background()
+
+	jobID := "test-cw-status-" + time.Now().Format("150405")
+	initialJob := models.AnalysisJob{
+		JobID:     jobID,
+		Owner:     "test-owner",
+		Repo:      "test-repo",
+		SHA:       "abc123",
+		Status:    models.JobStatusQueued,
+		Progress:  models.NewJobProgress(),
+		CreatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
+
+	js := skipIfNoNATS(t)
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+
+	cw.updateJobStatus(ctx, jobID, models.JobStatusRunning)
+
+	data, err := c.GetJob(ctx, jobID)
+	require.NoError(t, err)
+
+	var job models.AnalysisJob
+	require.NoError(t, json.Unmarshal(data, &job))
+	assert.Equal(t, models.JobStatusRunning, job.Status)
+}
+
+func TestComplexityWorker_UpdateJobCompletion_Success(t *testing.T) {
+	c := skipIfNoRedis(t)
+	ctx := context.Background()
+
+	jobID := "test-cw-complete-" + time.Now().Format("150405")
+	initialJob := models.AnalysisJob{
+		JobID:     jobID,
+		Owner:     "test-owner",
+		Repo:      "test-repo",
+		SHA:       "abc123",
+		Status:    models.JobStatusRunning,
+		Progress:  models.NewJobProgress(),
+		CreatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
+
+	js := skipIfNoNATS(t)
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+
+	now := time.Now().UTC()
+	cw.updateJobCompletion(ctx, jobID, models.JobStatusCompleted, &now, "")
+
+	data, err := c.GetJob(ctx, jobID)
+	require.NoError(t, err)
+	var job models.AnalysisJob
+	require.NoError(t, json.Unmarshal(data, &job))
+
+	assert.Equal(t, models.JobStatusCompleted, job.Status)
+	assert.NotNil(t, job.CompletedAt)
+	assert.Empty(t, job.Error)
+	assert.Equal(t, "/api/test-owner/test-repo/complexity", job.ResultURL)
+}
+
+func TestComplexityWorker_UpdateJobCompletion_Failed(t *testing.T) {
+	c := skipIfNoRedis(t)
+	ctx := context.Background()
+
+	jobID := "test-cw-failed-" + time.Now().Format("150405")
+	initialJob := models.AnalysisJob{
+		JobID:     jobID,
+		Owner:     "test-owner",
+		Repo:      "test-repo",
+		SHA:       "abc123",
+		Status:    models.JobStatusRunning,
+		Progress:  models.NewJobProgress(),
+		CreatedAt: time.Now().UTC(),
+	}
+	require.NoError(t, c.SetJob(ctx, jobID, &initialJob))
+
+	js := skipIfNoNATS(t)
+	cw := NewComplexityWorker(js, nil, c, "/tmp/grit-test")
+
+	now := time.Now().UTC()
+	cw.updateJobCompletion(ctx, jobID, models.JobStatusFailed, &now, "core analysis result not found")
+
+	data, err := c.GetJob(ctx, jobID)
+	require.NoError(t, err)
+	var job models.AnalysisJob
+	require.NoError(t, json.Unmarshal(data, &job))
+
+	assert.Equal(t, models.JobStatusFailed, job.Status)
+	assert.NotNil(t, job.CompletedAt)
+	assert.Equal(t, "core analysis result not found", job.Error)
+	assert.Empty(t, job.ResultURL, "failed complexity jobs should not have result_url")
+}
+
+func TestPublisher_PublishComplexity_DeduplicatesActiveJob(t *testing.T) {
+	c := skipIfNoRedis(t)
+	ctx := context.Background()
+
+	js := skipIfNoNATS(t)
+	_ = EnsureStream(js)
+	pub := NewPublisher(js, c)
+
+	// First publish should create a new job.
+	jobID1, err := pub.PublishComplexity(ctx, "dedup-owner", "dedup-repo", "sha1", "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, jobID1)
+
+	// Second publish with same params should return existing job.
+	jobID2, err := pub.PublishComplexity(ctx, "dedup-owner", "dedup-repo", "sha1", "")
+	require.NoError(t, err)
+	assert.Equal(t, jobID1, jobID2)
+
+	// Cleanup.
+	c.DeleteActiveComplexityJob(ctx, "dedup-owner", "dedup-repo", "sha1")
+}
