@@ -1,23 +1,15 @@
 package complexity
 
 import (
-	sitter "github.com/smacker/go-tree-sitter"
-	"github.com/smacker/go-tree-sitter/c"
-	"github.com/smacker/go-tree-sitter/cpp"
-	"github.com/smacker/go-tree-sitter/golang"
-	"github.com/smacker/go-tree-sitter/java"
-	"github.com/smacker/go-tree-sitter/javascript"
-	"github.com/smacker/go-tree-sitter/python"
-	"github.com/smacker/go-tree-sitter/ruby"
-	"github.com/smacker/go-tree-sitter/rust"
-	"github.com/smacker/go-tree-sitter/typescript/typescript"
+	"github.com/odvcencio/gotreesitter"
+	"github.com/odvcencio/gotreesitter/grammars"
 )
 
 // LanguageConfig holds the tree-sitter language and AST node type names
 // needed to extract functions and compute complexity for a specific language.
 type LanguageConfig struct {
 	Name               string
-	Language           *sitter.Language
+	Language           *gotreesitter.Language
 	FunctionNodeTypes  []string
 	DecisionPointTypes []string
 	// NestingTypes are node types that increase cognitive nesting depth.
@@ -29,7 +21,7 @@ type LanguageConfig struct {
 var languageRegistry = map[string]*LanguageConfig{
 	".go": {
 		Name:     "Go",
-		Language: golang.GetLanguage(),
+		Language: grammars.GoLanguage(),
 		FunctionNodeTypes: []string{
 			"function_declaration",
 			"method_declaration",
@@ -52,7 +44,7 @@ var languageRegistry = map[string]*LanguageConfig{
 	},
 	".ts": {
 		Name:     "TypeScript",
-		Language: typescript.GetLanguage(),
+		Language: grammars.TypescriptLanguage(),
 		FunctionNodeTypes: []string{
 			"function_declaration",
 			"method_definition",
@@ -77,12 +69,13 @@ var languageRegistry = map[string]*LanguageConfig{
 			"switch_statement",
 			"catch_clause",
 			"arrow_function",
+			"ternary_expression",
 		},
 		LogicalOperators: []string{"&&", "||"},
 	},
 	".js": {
 		Name:     "JavaScript",
-		Language: javascript.GetLanguage(),
+		Language: grammars.JavascriptLanguage(),
 		FunctionNodeTypes: []string{
 			"function_declaration",
 			"method_definition",
@@ -107,12 +100,13 @@ var languageRegistry = map[string]*LanguageConfig{
 			"switch_statement",
 			"catch_clause",
 			"arrow_function",
+			"ternary_expression",
 		},
 		LogicalOperators: []string{"&&", "||"},
 	},
 	".py": {
 		Name:     "Python",
-		Language: python.GetLanguage(),
+		Language: grammars.PythonLanguage(),
 		FunctionNodeTypes: []string{
 			"function_definition",
 		},
@@ -136,7 +130,7 @@ var languageRegistry = map[string]*LanguageConfig{
 	},
 	".rs": {
 		Name:     "Rust",
-		Language: rust.GetLanguage(),
+		Language: grammars.RustLanguage(),
 		FunctionNodeTypes: []string{
 			"function_item",
 		},
@@ -157,7 +151,7 @@ var languageRegistry = map[string]*LanguageConfig{
 	},
 	".java": {
 		Name:     "Java",
-		Language: java.GetLanguage(),
+		Language: grammars.JavaLanguage(),
 		FunctionNodeTypes: []string{
 			"method_declaration",
 			"constructor_declaration",
@@ -186,7 +180,7 @@ var languageRegistry = map[string]*LanguageConfig{
 	},
 	".c": {
 		Name:     "C",
-		Language: c.GetLanguage(),
+		Language: grammars.CLanguage(),
 		FunctionNodeTypes: []string{
 			"function_definition",
 		},
@@ -209,7 +203,7 @@ var languageRegistry = map[string]*LanguageConfig{
 	},
 	".cpp": {
 		Name:     "C++",
-		Language: cpp.GetLanguage(),
+		Language: grammars.CppLanguage(),
 		FunctionNodeTypes: []string{
 			"function_definition",
 		},
@@ -235,13 +229,13 @@ var languageRegistry = map[string]*LanguageConfig{
 		},
 		LogicalOperators: []string{"&&", "||"},
 	},
-	".cc": nil,  // alias, resolved in init()
+	".cc":  nil, // alias, resolved in init()
 	".cxx": nil, // alias, resolved in init()
-	".h": nil,   // alias, resolved in init()
+	".h":   nil, // alias, resolved in init()
 	".hpp": nil, // alias, resolved in init()
 	".rb": {
 		Name:     "Ruby",
-		Language: ruby.GetLanguage(),
+		Language: grammars.RubyLanguage(),
 		FunctionNodeTypes: []string{
 			"method",
 			"singleton_method",

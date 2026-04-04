@@ -1,23 +1,20 @@
 package complexity
 
 import (
-	"context"
 	"testing"
 
+	"github.com/odvcencio/gotreesitter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	sitter "github.com/smacker/go-tree-sitter"
 )
 
-func parseFunctionNode(t *testing.T, source []byte, ext string) *sitter.Node {
+func parseFunctionNode(t *testing.T, source []byte, ext string) *gotreesitter.Node {
 	t.Helper()
 	cfg := GetLanguageConfig(ext)
 	require.NotNil(t, cfg)
 
-	parser := sitter.NewParser()
-	parser.SetLanguage(cfg.Language)
-	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	parser := gotreesitter.NewParser(cfg.Language)
+	tree, err := parser.Parse(source)
 	require.NoError(t, err)
 	require.NotNil(t, tree)
 
@@ -25,17 +22,17 @@ func parseFunctionNode(t *testing.T, source []byte, ext string) *sitter.Node {
 	require.NotNil(t, root)
 
 	// Find the first function node.
-	var fn *sitter.Node
-	var walk func(n *sitter.Node)
-	walk = func(n *sitter.Node) {
+	var fn *gotreesitter.Node
+	var walk func(n *gotreesitter.Node)
+	walk = func(n *gotreesitter.Node) {
 		if fn != nil {
 			return
 		}
-		if isFunctionNode(n.Type(), cfg) {
+		if isFunctionNode(n.Type(cfg.Language), cfg) {
 			fn = n
 			return
 		}
-		for i := 0; i < int(n.ChildCount()); i++ {
+		for i := 0; i < n.ChildCount(); i++ {
 			walk(n.Child(i))
 		}
 	}

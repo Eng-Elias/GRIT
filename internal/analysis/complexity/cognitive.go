@@ -1,7 +1,7 @@
 package complexity
 
 import (
-	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/odvcencio/gotreesitter"
 )
 
 // CognitiveComplexity computes cognitive complexity for a function node
@@ -12,36 +12,45 @@ import (
 //  2. +nesting_level on top of base increment for nesting-eligible structures
 //  3. Nesting level increases when entering nesting structures
 //  4. Logical operator sequences: +1 per operator change in a boolean chain
-func CognitiveComplexity(node *sitter.Node, source []byte, cfg *LanguageConfig) int {
+func CognitiveComplexity(node *gotreesitter.Node, source []byte, cfg *LanguageConfig) int {
 	score := 0
-	walkCognitive(node, source, cfg, 0, &score, "")
+	walkCognitive(node, source, cfg, 0, &score, "", node)
 	return score
 }
 
-func walkCognitive(node *sitter.Node, source []byte, cfg *LanguageConfig, nesting int, score *int, lastLogicalOp string) {
+func walkCognitive(node *gotreesitter.Node, source []byte, cfg *LanguageConfig, nesting int, score *int, lastLogicalOp string, root *gotreesitter.Node) {
 	if node == nil {
 		return
 	}
 
-	nodeType := node.Type()
+	nodeType := node.Type(cfg.Language)
 
 	// Don't recurse into nested function definitions — they get their own score.
-	if node.Parent() != nil && isFunctionNode(nodeType, cfg) {
+	if node != root && isFunctionNode(nodeType, cfg) {
+		return
+	}
+
+	// The root function node itself does not contribute to scoring or nesting.
+	if node == root {
+		for i := 0; i < node.ChildCount(); i++ {
+			child := node.Child(i)
+			walkCognitive(child, source, cfg, nesting, score, "", root)
+		}
 		return
 	}
 
 	// Handle logical operators in binary expressions.
 	if nodeType == "binary_expression" || nodeType == "boolean_operator" {
-		op := extractOperator(node, source)
+		op := extractOperator(node, source, cfg.Language)
 		if isLogicalOperator(op, cfg) {
 			if op != lastLogicalOp {
 				// Operator change or first logical op in sequence: +1
 				*score++
 			}
 			// Recurse with updated lastLogicalOp so consecutive same-ops don't add.
-			for i := 0; i < int(node.ChildCount()); i++ {
+			for i := 0; i < node.ChildCount(); i++ {
 				child := node.Child(i)
-				walkCognitive(child, source, cfg, nesting, score, op)
+				walkCognitive(child, source, cfg, nesting, score, op, root)
 			}
 			return
 		}
@@ -67,9 +76,9 @@ func walkCognitive(node *sitter.Node, source []byte, cfg *LanguageConfig, nestin
 		newNesting = nesting + 1
 	}
 
-	for i := 0; i < int(node.ChildCount()); i++ {
+	for i := 0; i < node.ChildCount(); i++ {
 		child := node.Child(i)
-		walkCognitive(child, source, cfg, newNesting, score, "")
+		walkCognitive(child, source, cfg, newNesting, score, "", root)
 	}
 }
 
@@ -77,6 +86,10 @@ func walkCognitive(node *sitter.Node, source []byte, cfg *LanguageConfig, nestin
 func isCognitiveIncrement(nodeType string, cfg *LanguageConfig) bool {
 	// All nesting types get an increment.
 	if isNestingType(nodeType, cfg) {
+		return true
+	}
+	// Decision point types that are not nesting types still break linear flow (+1, no nesting penalty).
+	if isDecisionPoint(nodeType, cfg) {
 		return true
 	}
 	// Additionally, else/elif clauses get +1 but don't nest further themselves

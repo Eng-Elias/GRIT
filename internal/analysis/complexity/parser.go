@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/odvcencio/gotreesitter"
 
 	"github.com/grit-app/grit/internal/models"
 )
@@ -20,10 +20,9 @@ func ParseFile(ctx context.Context, path string, source []byte, loc int) *models
 		return nil
 	}
 
-	parser := sitter.NewParser()
-	parser.SetLanguage(cfg.Language)
+	parser := gotreesitter.NewParser(cfg.Language)
 
-	tree, err := parser.ParseCtx(ctx, nil, source)
+	tree, err := parser.Parse(source)
 	if err != nil {
 		slog.Warn("complexity: failed to parse file", "path", path, "error", err)
 		return nil
@@ -76,17 +75,17 @@ func ParseFile(ctx context.Context, path string, source []byte, loc int) *models
 }
 
 // extractFunctions walks the AST and returns complexity metrics for each function.
-func extractFunctions(root *sitter.Node, source []byte, cfg *LanguageConfig) []models.FunctionComplexity {
+func extractFunctions(root *gotreesitter.Node, source []byte, cfg *LanguageConfig) []models.FunctionComplexity {
 	var functions []models.FunctionComplexity
 	anonCount := 0
 
-	var walk func(node *sitter.Node)
-	walk = func(node *sitter.Node) {
+	var walk func(node *gotreesitter.Node)
+	walk = func(node *gotreesitter.Node) {
 		if node == nil {
 			return
 		}
 
-		nodeType := node.Type()
+		nodeType := node.Type(cfg.Language)
 		if isFunctionNode(nodeType, cfg) {
 			name := extractFunctionName(node, source, cfg)
 			if name == "" {
@@ -110,7 +109,7 @@ func extractFunctions(root *sitter.Node, source []byte, cfg *LanguageConfig) []m
 			return
 		}
 
-		for i := 0; i < int(node.ChildCount()); i++ {
+		for i := 0; i < node.ChildCount(); i++ {
 			child := node.Child(i)
 			walk(child)
 		}
@@ -131,28 +130,28 @@ func isFunctionNode(nodeType string, cfg *LanguageConfig) bool {
 }
 
 // extractFunctionName attempts to extract the function name from a function node.
-func extractFunctionName(node *sitter.Node, source []byte, cfg *LanguageConfig) string {
+func extractFunctionName(node *gotreesitter.Node, source []byte, cfg *LanguageConfig) string {
 	// Most languages have a "name" field on function nodes.
-	nameNode := node.ChildByFieldName("name")
+	nameNode := node.ChildByFieldName("name", cfg.Language)
 	if nameNode != nil {
-		return nameNode.Content(source)
+		return nameNode.Text(source)
 	}
 
 	// For method declarations, try "declarator" field (C/C++/Java).
-	declNode := node.ChildByFieldName("declarator")
+	declNode := node.ChildByFieldName("declarator", cfg.Language)
 	if declNode != nil {
 		// The declarator may itself have a name child (e.g. function_declarator → declarator → identifier).
-		inner := declNode.ChildByFieldName("declarator")
+		inner := declNode.ChildByFieldName("declarator", cfg.Language)
 		if inner != nil {
-			return inner.Content(source)
+			return inner.Text(source)
 		}
-		innerName := declNode.ChildByFieldName("name")
+		innerName := declNode.ChildByFieldName("name", cfg.Language)
 		if innerName != nil {
-			return innerName.Content(source)
+			return innerName.Text(source)
 		}
 		// If it's a simple identifier, return its content.
-		if declNode.Type() == "identifier" {
-			return declNode.Content(source)
+		if declNode.Type(cfg.Language) == "identifier" {
+			return declNode.Text(source)
 		}
 	}
 
