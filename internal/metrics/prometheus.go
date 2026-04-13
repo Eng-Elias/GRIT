@@ -54,4 +54,15 @@ var (
 		Help:    "End-to-end churn analysis duration",
 		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
 	})
+
+	BlameAnalysisDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "grit_blame_analysis_duration_seconds",
+		Help:    "End-to-end blame/contributor analysis duration",
+		Buckets: []float64{1, 5, 10, 30, 60, 120, 300, 600},
+	})
+
+	BlameJobsCompletedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "grit_blame_jobs_completed_total",
+		Help: "Total blame/contributor analysis jobs completed",
+	})
 )

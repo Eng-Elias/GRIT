@@ -15,6 +15,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/grit-app/grit/internal/analysis/blame"
 	"github.com/grit-app/grit/internal/analysis/churn"
 	"github.com/grit-app/grit/internal/analysis/complexity"
 	"github.com/grit-app/grit/internal/analysis/core"
@@ -71,6 +72,9 @@ func main() {
 	churnAnalyzer := churn.NewAnalyzer()
 	churnWorker := job.NewChurnWorker(js, churnAnalyzer, redisCache, cfg.CloneDir)
 
+	blameAnalyzer := blame.NewAnalyzer()
+	blameWorker := job.NewBlameWorker(js, blameAnalyzer, redisCache, cfg.CloneDir)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -92,6 +96,12 @@ func main() {
 	}
 	slog.Info("churn worker started")
 
+	if err := blameWorker.Start(ctx); err != nil {
+		slog.Error("failed to start blame worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("blame worker started")
+
 	clone.StartCleanup(ctx, cfg.CloneDir, 1*time.Hour, 10*time.Minute)
 	slog.Info("clone cleanup goroutine started")
 
@@ -101,6 +111,7 @@ func main() {
 	badgeHandler := handler.NewBadgeHandler(redisCache)
 	complexityHandler := handler.NewComplexityHandler(redisCache)
 	churnHandler := handler.NewChurnHandler(redisCache)
+	contributorHandler := handler.NewContributorHandler(redisCache)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -116,6 +127,8 @@ func main() {
 		r.Get("/badge", badgeHandler.HandleBadge)
 		r.Get("/complexity", complexityHandler.HandleComplexity)
 		r.Get("/churn-matrix", churnHandler.HandleChurnMatrix)
+		r.Get("/contributors", contributorHandler.HandleContributors)
+		r.Get("/contributors/files", contributorHandler.HandleContributorFiles)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 

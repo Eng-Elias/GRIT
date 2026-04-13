@@ -119,13 +119,20 @@ func (w *Worker) processMessage(ctx context.Context, msg *nats.Msg) {
 		"total_lines", result.TotalLines,
 	)
 
-	// Auto-trigger complexity analysis after core completion.
+	// Auto-trigger downstream analysis jobs after core completion.
 	if w.publisher != nil {
 		compJobID, err := w.publisher.PublishComplexity(ctx, payload.Owner, payload.Repo, result.Repository.LatestSHA, payload.Token)
 		if err != nil {
 			slog.Error("worker: failed to publish complexity job", "job_id", payload.JobID, "error", err)
 		} else {
 			slog.Info("worker: complexity job enqueued", "core_job_id", payload.JobID, "complexity_job_id", compJobID)
+		}
+
+		blameJobID, err := w.publisher.PublishBlame(ctx, payload.Owner, payload.Repo, result.Repository.LatestSHA, payload.Token)
+		if err != nil {
+			slog.Error("worker: failed to publish blame job", "job_id", payload.JobID, "error", err)
+		} else {
+			slog.Info("worker: blame job enqueued", "core_job_id", payload.JobID, "blame_job_id", blameJobID)
 		}
 	}
 
