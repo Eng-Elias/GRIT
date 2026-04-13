@@ -53,6 +53,12 @@ func (h *AnalysisHandler) HandleAnalysis(w http.ResponseWriter, r *http.Request)
 	sha, cachedData, err := h.tryCache(r.Context(), owner, repo)
 	if err == nil && cachedData != nil {
 		gritmetrics.CacheHitTotal.Inc()
+
+		// Embed complexity_summary and churn_summary into core response.
+		cachedData = h.embedComplexitySummary(r.Context(), owner, repo, cachedData)
+		cachedData = h.embedChurnSummary(r.Context(), owner, repo, cachedData)
+		cachedData = h.embedContributorSummary(r.Context(), owner, repo, cachedData)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
 		w.WriteHeader(http.StatusOK)
@@ -116,6 +122,129 @@ func (h *AnalysisHandler) tryCache(ctx context.Context, owner, repo string) (str
 	}
 
 	return result.Repository.LatestSHA, enriched, nil
+}
+
+func (h *AnalysisHandler) embedComplexitySummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.ComplexitySummary{
+		Status:        "pending",
+		ComplexityURL: fmt.Sprintf("/api/%s/%s/complexity", owner, repo),
+	}
+
+	complexityData, err := h.cache.GetComplexity(ctx, owner, repo, "")
+	if err == nil && complexityData != nil {
+		var cr models.ComplexityResult
+		if json.Unmarshal(complexityData, &cr) == nil {
+			summary.Status = "complete"
+			summary.MeanComplexity = cr.MeanComplexity
+			summary.TotalFunctionCount = cr.TotalFunctionCount
+			summary.HotFileCount = len(cr.HotFiles)
+		}
+	}
+
+	// Merge complexity_summary into the core JSON object.
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["complexity_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
+}
+
+func (h *AnalysisHandler) embedChurnSummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.ChurnSummary{
+		Status:         "pending",
+		ChurnMatrixURL: fmt.Sprintf("/api/%s/%s/churn-matrix", owner, repo),
+	}
+
+	churnData, err := h.cache.GetChurn(ctx, owner, repo, "")
+	if err == nil && churnData != nil {
+		var cr models.ChurnMatrixResult
+		if json.Unmarshal(churnData, &cr) == nil {
+			summary.Status = "complete"
+			summary.TotalFiles = cr.TotalFilesChurned
+			summary.CriticalCount = cr.CriticalCount
+			summary.StaleCount = cr.StaleCount
+		}
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["churn_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
+}
+
+func (h *AnalysisHandler) embedContributorSummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.ContributorSummary{
+		Status:          "pending",
+		ContributorsURL: fmt.Sprintf("/api/%s/%s/contributors", owner, repo),
+	}
+
+	contributorData, err := h.cache.GetContributors(ctx, owner, repo, "")
+	if err == nil && contributorData != nil {
+		var cr models.ContributorResult
+		if json.Unmarshal(contributorData, &cr) == nil {
+			summary.Status = "complete"
+			summary.BusFactor = cr.BusFactor
+			summary.TotalAuthors = len(cr.Authors)
+
+			// Count active authors.
+			activeCount := 0
+			for _, a := range cr.Authors {
+				if a.IsActive {
+					activeCount++
+				}
+			}
+			summary.ActiveAuthors = activeCount
+
+			// Top 3 contributors as AuthorBrief.
+			top := 3
+			if len(cr.Authors) < top {
+				top = len(cr.Authors)
+			}
+			briefs := make([]models.AuthorBrief, top)
+			for i := 0; i < top; i++ {
+				briefs[i] = models.AuthorBrief{
+					Name:       cr.Authors[i].Name,
+					Email:      cr.Authors[i].Email,
+					LinesOwned: cr.Authors[i].TotalLinesOwned,
+				}
+			}
+			summary.TopContributors = briefs
+		}
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["contributor_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
 }
 
 func extractToken(r *http.Request) string {

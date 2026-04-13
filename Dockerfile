@@ -1,12 +1,14 @@
 FROM golang:1.22-alpine AS builder
 
+RUN apk add --no-cache build-base git
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /grit ./cmd/grit/
+RUN CGO_ENABLED=1 GOOS=linux go build -o /grit ./cmd/grit/
 
 FROM alpine:3.19
 

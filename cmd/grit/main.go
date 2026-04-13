@@ -15,6 +15,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/grit-app/grit/internal/analysis/blame"
+	"github.com/grit-app/grit/internal/analysis/churn"
+	"github.com/grit-app/grit/internal/analysis/complexity"
 	"github.com/grit-app/grit/internal/analysis/core"
 	"github.com/grit-app/grit/internal/cache"
 	"github.com/grit-app/grit/internal/clone"
@@ -61,7 +64,16 @@ func main() {
 
 	analyzer := core.NewAnalyzer(cfg.CloneDir, cfg.CloneSizeThresholdKB)
 	publisher := job.NewPublisher(js, redisCache)
-	worker := job.NewWorker(js, analyzer, redisCache)
+	worker := job.NewWorker(js, analyzer, redisCache, publisher)
+
+	complexityAnalyzer := complexity.NewAnalyzer()
+	complexityWorker := job.NewComplexityWorker(js, complexityAnalyzer, redisCache, cfg.CloneDir, publisher)
+
+	churnAnalyzer := churn.NewAnalyzer()
+	churnWorker := job.NewChurnWorker(js, churnAnalyzer, redisCache, cfg.CloneDir)
+
+	blameAnalyzer := blame.NewAnalyzer()
+	blameWorker := job.NewBlameWorker(js, blameAnalyzer, redisCache, cfg.CloneDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,7 +82,25 @@ func main() {
 		slog.Error("failed to start worker", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("worker started")
+	slog.Info("core worker started")
+
+	if err := complexityWorker.Start(ctx); err != nil {
+		slog.Error("failed to start complexity worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("complexity worker started")
+
+	if err := churnWorker.Start(ctx); err != nil {
+		slog.Error("failed to start churn worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("churn worker started")
+
+	if err := blameWorker.Start(ctx); err != nil {
+		slog.Error("failed to start blame worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("blame worker started")
 
 	clone.StartCleanup(ctx, cfg.CloneDir, 1*time.Hour, 10*time.Minute)
 	slog.Info("clone cleanup goroutine started")
@@ -79,6 +109,9 @@ func main() {
 	statusHandler := handler.NewStatusHandler(redisCache)
 	cacheHandler := handler.NewCacheHandler(redisCache)
 	badgeHandler := handler.NewBadgeHandler(redisCache)
+	complexityHandler := handler.NewComplexityHandler(redisCache)
+	churnHandler := handler.NewChurnHandler(redisCache)
+	contributorHandler := handler.NewContributorHandler(redisCache)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -92,6 +125,10 @@ func main() {
 		r.Get("/", analysisHandler.HandleAnalysis)
 		r.Get("/status", statusHandler.HandleStatus)
 		r.Get("/badge", badgeHandler.HandleBadge)
+		r.Get("/complexity", complexityHandler.HandleComplexity)
+		r.Get("/churn-matrix", churnHandler.HandleChurnMatrix)
+		r.Get("/contributors", contributorHandler.HandleContributors)
+		r.Get("/contributors/files", contributorHandler.HandleContributorFiles)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 
