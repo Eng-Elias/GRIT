@@ -75,6 +75,8 @@ func main() {
 	blameAnalyzer := blame.NewAnalyzer()
 	blameWorker := job.NewBlameWorker(js, blameAnalyzer, redisCache, cfg.CloneDir)
 
+	temporalWorker := job.NewTemporalWorker(js, redisCache, cfg.CloneDir)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -102,6 +104,12 @@ func main() {
 	}
 	slog.Info("blame worker started")
 
+	if err := temporalWorker.Start(ctx); err != nil {
+		slog.Error("failed to start temporal worker", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("temporal worker started")
+
 	clone.StartCleanup(ctx, cfg.CloneDir, 1*time.Hour, 10*time.Minute)
 	slog.Info("clone cleanup goroutine started")
 
@@ -112,6 +120,7 @@ func main() {
 	complexityHandler := handler.NewComplexityHandler(redisCache)
 	churnHandler := handler.NewChurnHandler(redisCache)
 	contributorHandler := handler.NewContributorHandler(redisCache)
+	temporalHandler := handler.NewTemporalHandler(redisCache)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -129,6 +138,7 @@ func main() {
 		r.Get("/churn-matrix", churnHandler.HandleChurnMatrix)
 		r.Get("/contributors", contributorHandler.HandleContributors)
 		r.Get("/contributors/files", contributorHandler.HandleContributorFiles)
+		r.Get("/temporal", temporalHandler.HandleTemporal)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 
