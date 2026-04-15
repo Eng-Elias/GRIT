@@ -17,11 +17,11 @@
 
 **Purpose**: Create AI model types, add SDK dependency, and extend shared infrastructure (cache, config, metrics)
 
-- [ ] T001 Add `google.golang.org/genai` and `golang.org/x/time/rate` dependencies via `go get`
-- [ ] T002 Create AI model types (AISummary, ChatMessage, ChatRequest, HealthScore, HealthCategories, CategoryScore, ComplexFileSnippet) in `internal/models/ai.go`
-- [ ] T003 [P] Add `GeminiAPIKey` field to Config struct and load `GEMINI_API_KEY` env var in `internal/config/config.go`
-- [ ] T004 [P] Add `AISummaryTTL = 1 * time.Hour` and `AIHealthTTL = 6 * time.Hour` constants, cache key helpers, and Get/Set/Delete methods for AI summary and AI health in `internal/cache/redis.go`
-- [ ] T005 [P] Add AI Prometheus metrics (ai_request_duration_seconds histogram, ai_request_total counter with labels for feature and status) in `internal/metrics/prometheus.go`
+- [x] T001 Add `google.golang.org/genai` and `golang.org/x/time/rate` dependencies via `go get`
+- [x] T002 Create AI model types (AISummary, ChatMessage, ChatRequest, HealthScore, HealthCategories, CategoryScore, ComplexFileSnippet) in `internal/models/ai.go`
+- [x] T003 [P] Add `GeminiAPIKey` field to Config struct and load `GEMINI_API_KEY` env var in `internal/config/config.go`
+- [x] T004 [P] Add `AISummaryTTL = 1 * time.Hour` and `AIHealthTTL = 6 * time.Hour` constants, cache key helpers, and Get/Set/Delete methods for AI summary and AI health in `internal/cache/redis.go`
+- [x] T005 [P] Add AI Prometheus metrics (ai_request_duration_seconds histogram, ai_request_total counter with labels for feature and status) in `internal/metrics/prometheus.go`
 
 ---
 
@@ -31,11 +31,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T006 Implement Gemini client wrapper in `internal/ai/client.go` — initialize `genai.NewClient` with APIKey and `BackendGeminiAPI`, expose primary model (`gemini-2.5-flash`) and fallback model (`gemini-2.5-flash-lite`) references, provide `GenerateStream` and `Generate` methods that delegate to the SDK
-- [ ] T007 Implement `retryWithBackoff` helper in `internal/ai/client.go` — 3 attempts, exponential backoff with jitter (base 1s, max 30s), switch to fallback model on attempt 3, catch 429/5xx errors, return masked errors per R7
-- [ ] T008 [P] Implement `BuildContext` pure function in `internal/ai/context.go` — accept repo metadata, file tree paths, README content, manifest map, complex file snippets, and directory summary; assemble into `[]genai.Part` with token budget enforcement (800K total, 4 chars/token approximation); truncate per priority order (file tree first, README last)
-- [ ] T009 [P] Write tests for `BuildContext` in `internal/ai/context_test.go` — test token budget enforcement, truncation priority, missing README handling, empty manifests, large file tree truncation
-- [ ] T010 Write tests for Gemini client retry logic in `internal/ai/client_test.go` — test successful call, retry on 429, model fallback on attempt 3, error masking, backoff timing
+- [x] T006 Implement Gemini client wrapper in `internal/ai/client.go` — initialize `genai.NewClient` with APIKey and `BackendGeminiAPI`, expose primary model (`gemini-2.5-flash`) and fallback model (`gemini-2.5-flash-lite`) references, provide `GenerateStream` and `Generate` methods that delegate to the SDK
+- [x] T007 Implement `retryWithBackoff` helper in `internal/ai/client.go` — 3 attempts, exponential backoff with jitter (base 1s, max 30s), switch to fallback model on attempt 3, catch 429/5xx errors, return masked errors per R7
+- [x] T008 [P] Implement `BuildContext` pure function in `internal/ai/context.go` — accept repo metadata, file tree paths, README content, manifest map, complex file snippets, and directory summary; assemble into `[]genai.Part` with token budget enforcement (800K total, 4 chars/token approximation); truncate per priority order (file tree first, README last)
+- [x] T009 [P] Write tests for `BuildContext` in `internal/ai/context_test.go` — test token budget enforcement, truncation priority, missing README handling, empty manifests, large file tree truncation
+- [x] T010 Write tests for Gemini client retry logic in `internal/ai/client_test.go` — test successful call, retry on 429, model fallback on attempt 3, error masking, backoff timing
 
 **Checkpoint**: Gemini client and context builder ready — user story implementation can begin.
 
@@ -49,8 +49,8 @@
 
 > Note: US4 is implemented first because US1, US2, US3 all depend on context assembly from cached data. The `BuildContext` function was created in Phase 2; this phase adds the higher-level `AssembleContext` that reads from cache and the cloned repo.
 
-- [ ] T011 [US4] Implement `AssembleContext` in `internal/ai/context.go` — read core analysis from cache to get file tree and metadata, read complexity results for top 5 files, read README.md and package manifests (package.json, go.mod, Cargo.toml, requirements.txt, pyproject.toml, pom.xml, build.gradle) from the cloned repo, compute directory summary, delegate to `BuildContext`
-- [ ] T012 [US4] Write tests for `AssembleContext` in `internal/ai/context_test.go` — test with full cache data, missing complexity data (proceeds without complex files section), missing README, no manifests found
+- [x] T011 [US4] Implement `AssembleContext` in `internal/ai/context.go` — read core analysis from cache to get file tree and metadata, read complexity results for top 5 files, read README.md and package manifests (package.json, go.mod, Cargo.toml, requirements.txt, pyproject.toml, pom.xml, build.gradle) from the cloned repo, compute directory summary, delegate to `BuildContext`
+- [x] T012 [US4] Write tests for `AssembleContext` in `internal/ai/context_test.go` — test with full cache data, missing complexity data (proceeds without complex files section), missing README, no manifests found
 
 **Checkpoint**: Context construction fully functional and testable independently.
 
@@ -62,10 +62,10 @@
 
 **Independent Test**: POST to summary endpoint for a repo with cached core analysis → receive SSE stream → verify structured fields → second request returns cached JSON with `X-Cache: HIT`.
 
-- [ ] T013 [US1] Implement summary generation logic in `internal/ai/summary.go` — build summary prompt instructing Gemini to return project description, architecture, tech stack, red flags, entry points; call `GenerateStream` via the client wrapper; collect streamed chunks; parse final result into `models.AISummary`
-- [ ] T014 [US1] Write tests for summary generation in `internal/ai/summary_test.go` — mock Gemini streaming response, verify prompt structure, verify AISummary parsing from streamed output
-- [ ] T015 [US1] Implement SSE streaming handler in `internal/handler/ai_summary.go` — validate owner/repo, check GEMINI_API_KEY (503 if missing), check core analysis cache (409 if missing), check AI summary cache (return cached with X-Cache HIT), otherwise call summary generation and stream via `http.Flusher`, cache complete result with 1h TTL
-- [ ] T016 [US1] Wire summary route `POST /api/{owner}/{repo}/ai/summary` in `cmd/grit/main.go` — create AI handler struct, register route
+- [x] T013 [US1] Implement summary generation logic in `internal/ai/summary.go` — build summary prompt instructing Gemini to return project description, architecture, tech stack, red flags, entry points; call `GenerateStream` via the client wrapper; collect streamed chunks; parse final result into `models.AISummary`
+- [x] T014 [US1] Write tests for summary generation in `internal/ai/summary_test.go` — mock Gemini streaming response, verify prompt structure, verify AISummary parsing from streamed output
+- [x] T015 [US1] Implement SSE streaming handler in `internal/handler/ai_summary.go` — validate owner/repo, check GEMINI_API_KEY (503 if missing), check core analysis cache (409 if missing), check AI summary cache (return cached with X-Cache HIT), otherwise call summary generation and stream via `http.Flusher`, cache complete result with 1h TTL
+- [x] T016 [US1] Wire summary route `POST /api/{owner}/{repo}/ai/summary` in `cmd/grit/main.go` — create AI handler struct, register route
 
 **Checkpoint**: AI summary endpoint fully functional — streams on first request, returns cached on second.
 
@@ -77,12 +77,12 @@
 
 **Independent Test**: POST chat messages → receive SSE stream → verify context is prepended → verify rate limit kicks in after 10 requests/minute.
 
-- [ ] T017 [P] [US2] Implement per-IP rate limiter in `internal/ai/ratelimit.go` — `NewRateLimiter` returning struct with `sync.Map` of `rate.Limiter` per IP, `Allow(ip string) bool` method, background cleanup goroutine evicting stale entries every 5 minutes
-- [ ] T018 [P] [US2] Write tests for rate limiter in `internal/ai/ratelimit_test.go` — test allow within limit, deny over limit, per-IP isolation, cleanup of stale entries
-- [ ] T019 [US2] Implement chat logic in `internal/ai/chat.go` — validate ChatRequest (non-empty, last role is "user", max 20 turns with oldest truncation), prepend context as system message, call `GenerateStream` with full conversation, collect streamed chunks
-- [ ] T020 [US2] Write tests for chat logic in `internal/ai/chat_test.go` — test turn truncation at 20, system context prepend, validation errors (empty messages, last role not user, whitespace content)
-- [ ] T021 [US2] Implement SSE streaming chat handler in `internal/handler/ai_chat.go` — validate owner/repo, check API key (503), check core analysis cache (409), check IP rate limit (429), decode ChatRequest body (400 on invalid), call chat logic and stream via `http.Flusher`
-- [ ] T022 [US2] Wire chat route `POST /api/{owner}/{repo}/ai/chat` in `cmd/grit/main.go`
+- [x] T017 [P] [US2] Implement per-IP rate limiter in `internal/ai/ratelimit.go` — `NewRateLimiter` returning struct with `sync.Map` of `rate.Limiter` per IP, `Allow(ip string) bool` method, background cleanup goroutine evicting stale entries every 5 minutes
+- [x] T018 [P] [US2] Write tests for rate limiter in `internal/ai/ratelimit_test.go` — test allow within limit, deny over limit, per-IP isolation, cleanup of stale entries
+- [x] T019 [US2] Implement chat logic in `internal/ai/chat.go` — validate ChatRequest (non-empty, last role is "user", max 20 turns with oldest truncation), prepend context as system message, call `GenerateStream` with full conversation, collect streamed chunks
+- [x] T020 [US2] Write tests for chat logic in `internal/ai/chat_test.go` — test turn truncation at 20, system context prepend, validation errors (empty messages, last role not user, whitespace content)
+- [x] T021 [US2] Implement SSE streaming chat handler in `internal/handler/ai_chat.go` — validate owner/repo, check API key (503), check core analysis cache (409), check IP rate limit (429), decode ChatRequest body (400 on invalid), call chat logic and stream via `http.Flusher`
+- [x] T022 [US2] Wire chat route `POST /api/{owner}/{repo}/ai/chat` in `cmd/grit/main.go`
 
 **Checkpoint**: Chat endpoint functional — streams responses, enforces rate limit, manages turns.
 
@@ -94,10 +94,10 @@
 
 **Independent Test**: GET health endpoint → receive JSON with overall score (0-100), 5 categories, and improvements list → second request returns cached with `X-Cache: HIT`.
 
-- [ ] T023 [US3] Implement health score generation in `internal/ai/health.go` — build health prompt with JSON schema instruction, call `Generate` (non-streaming) with `ResponseMIMEType: "application/json"`, parse response into `models.HealthScore`, on JSON parse failure retry once with stricter prompt including exact schema
-- [ ] T024 [US3] Write tests for health score generation in `internal/ai/health_test.go` — mock Gemini JSON response, test successful parse, test retry on malformed JSON, test final failure after both attempts
-- [ ] T025 [US3] Implement health score handler in `internal/handler/ai_health.go` — validate owner/repo, check API key (503), check core analysis cache (409), check health score cache (return cached with X-Cache HIT), otherwise generate and cache with 6h TTL, return JSON
-- [ ] T026 [US3] Wire health route `GET /api/{owner}/{repo}/ai/health` in `cmd/grit/main.go`
+- [x] T023 [US3] Implement health score generation in `internal/ai/health.go` — build health prompt with JSON schema instruction, call `Generate` (non-streaming) with `ResponseMIMEType: "application/json"`, parse response into `models.HealthScore`, on JSON parse failure retry once with stricter prompt including exact schema
+- [x] T024 [US3] Write tests for health score generation in `internal/ai/health_test.go` — mock Gemini JSON response, test successful parse, test retry on malformed JSON, test final failure after both attempts
+- [x] T025 [US3] Implement health score handler in `internal/handler/ai_health.go` — validate owner/repo, check API key (503), check core analysis cache (409), check health score cache (return cached with X-Cache HIT), otherwise generate and cache with 6h TTL, return JSON
+- [x] T026 [US3] Wire health route `GET /api/{owner}/{repo}/ai/health` in `cmd/grit/main.go`
 
 **Checkpoint**: Health score endpoint functional — generates structured JSON, caches results.
 
@@ -107,12 +107,12 @@
 
 **Purpose**: Integration, cache cleanup, build verification, and final validation.
 
-- [ ] T027 Add AI summary and AI health cache deletion to `HandleDeleteCache` in `internal/handler/cache.go`
-- [ ] T028 [P] Embed AI summary status into core analysis response via `embedAISummary` method in `internal/handler/analysis.go` — follow existing pattern (complexity_summary, churn_summary), show status pending/complete with `ai_summary_url`
-- [ ] T029 Increase `WriteTimeout` to 120s in `cmd/grit/main.go` for long SSE streaming connections
-- [ ] T030 Verify all existing tests still pass (`go test ./...`)
-- [ ] T031 Verify build succeeds (`go build ./...`)
-- [ ] T032 Run quickstart.md validation — confirm 503 when no API key, confirm 409 when no core analysis
+- [x] T027 Add AI summary and AI health cache deletion to `HandleDeleteCache` in `internal/handler/cache.go`
+- [x] T028 [P] Embed AI summary status into core analysis response via `embedAISummary` method in `internal/handler/analysis.go` — follow existing pattern (complexity_summary, churn_summary), show status pending/complete with `ai_summary_url`
+- [x] T029 Increase `WriteTimeout` to 120s in `cmd/grit/main.go` for long SSE streaming connections
+- [x] T030 Verify all existing tests still pass (`go test ./...`)
+- [x] T031 Verify build succeeds (`go build ./...`)
+- [x] T032 Run quickstart.md validation — confirm 503 when no API key, confirm 409 when no core analysis
 
 ---
 
