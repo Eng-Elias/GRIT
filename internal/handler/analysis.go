@@ -58,6 +58,7 @@ func (h *AnalysisHandler) HandleAnalysis(w http.ResponseWriter, r *http.Request)
 		cachedData = h.embedComplexitySummary(r.Context(), owner, repo, cachedData)
 		cachedData = h.embedChurnSummary(r.Context(), owner, repo, cachedData)
 		cachedData = h.embedContributorSummary(r.Context(), owner, repo, cachedData)
+		cachedData = h.embedTemporalSummary(r.Context(), owner, repo, cachedData)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
@@ -240,6 +241,58 @@ func (h *AnalysisHandler) embedContributorSummary(ctx context.Context, owner, re
 		return coreData
 	}
 	raw["contributor_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
+}
+
+func (h *AnalysisHandler) embedTemporalSummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.TemporalSummary{
+		Status:      "pending",
+		TemporalURL: fmt.Sprintf("/api/%s/%s/temporal", owner, repo),
+	}
+
+	temporalData, err := h.cache.GetTemporal(ctx, owner, repo, "", "3y")
+	if err == nil && temporalData != nil {
+		var tr models.TemporalResult
+		if json.Unmarshal(temporalData, &tr) == nil {
+			summary.Status = "complete"
+
+			// Current LOC from latest snapshot
+			if len(tr.LOCOverTime) > 0 {
+				summary.CurrentLOC = tr.LOCOverTime[len(tr.LOCOverTime)-1].TotalLOC
+			}
+
+			// LOC trend: compare latest vs 6 months ago
+			if len(tr.LOCOverTime) > 6 {
+				sixMonthsAgo := tr.LOCOverTime[len(tr.LOCOverTime)-7].TotalLOC
+				if sixMonthsAgo > 0 {
+					summary.LOCTrend6mPercent = float64(summary.CurrentLOC-sixMonthsAgo) / float64(sixMonthsAgo) * 100.0
+				}
+			}
+
+			// Average weekly commits
+			if len(tr.Velocity.WeeklyActivity) > 0 {
+				totalCommits := 0
+				for _, w := range tr.Velocity.WeeklyActivity {
+					totalCommits += w.Commits
+				}
+				summary.AvgWeeklyCommits = float64(totalCommits) / float64(len(tr.Velocity.WeeklyActivity))
+			}
+		}
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["temporal_summary"] = summaryJSON
 	merged, err := json.Marshal(raw)
 	if err != nil {
 		return coreData

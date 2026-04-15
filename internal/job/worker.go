@@ -134,6 +134,13 @@ func (w *Worker) processMessage(ctx context.Context, msg *nats.Msg) {
 		} else {
 			slog.Info("worker: blame job enqueued", "core_job_id", payload.JobID, "blame_job_id", blameJobID)
 		}
+
+		temporalJobID, err := w.publisher.PublishTemporal(ctx, payload.Owner, payload.Repo, result.Repository.LatestSHA, payload.Token)
+		if err != nil {
+			slog.Error("worker: failed to publish temporal job", "job_id", payload.JobID, "error", err)
+		} else {
+			slog.Info("worker: temporal job enqueued", "core_job_id", payload.JobID, "temporal_job_id", temporalJobID)
+		}
 	}
 
 	msg.Ack()

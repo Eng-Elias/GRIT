@@ -65,4 +65,15 @@ var (
 		Name: "grit_blame_jobs_completed_total",
 		Help: "Total blame/contributor analysis jobs completed",
 	})
+
+	TemporalAnalysisDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "grit_temporal_analysis_duration_seconds",
+		Help:    "End-to-end temporal analysis duration",
+		Buckets: []float64{1, 5, 10, 30, 60, 120, 300},
+	})
+
+	TemporalJobsCompletedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "grit_temporal_jobs_completed_total",
+		Help: "Total temporal analysis jobs completed",
+	})
 )

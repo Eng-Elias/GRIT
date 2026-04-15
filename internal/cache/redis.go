@@ -17,6 +17,7 @@ const (
 	ComplexityAnalysisTTL  = 24 * time.Hour
 	ChurnAnalysisTTL       = 24 * time.Hour
 	ContributorAnalysisTTL = 48 * time.Hour
+	TemporalAnalysisTTL    = 12 * time.Hour
 	JobTTL                 = 1 * time.Hour
 	ActiveJobTTL           = 10 * time.Minute
 )
@@ -391,4 +392,84 @@ func (c *Cache) SetActiveChurnJob(ctx context.Context, owner, repo, sha, jobID s
 
 func (c *Cache) DeleteActiveChurnJob(ctx context.Context, owner, repo, sha string) error {
 	return c.client.Del(ctx, activeChurnKey(owner, repo, sha)).Err()
+}
+
+func temporalKey(owner, repo, sha, period string) string {
+	return fmt.Sprintf("%s/%s:%s:temporal:%s", owner, repo, sha, period)
+}
+
+func activeTemporalKey(owner, repo, sha string) string {
+	return fmt.Sprintf("active:%s/%s:%s:temporal", owner, repo, sha)
+}
+
+func (c *Cache) GetTemporal(ctx context.Context, owner, repo, sha, period string) ([]byte, error) {
+	if sha == "" {
+		return c.findTemporal(ctx, owner, repo, period)
+	}
+	data, err := c.client.Get(ctx, temporalKey(owner, repo, sha, period)).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, ErrCacheMiss
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cache: get temporal: %w", err)
+	}
+	return data, nil
+}
+
+func (c *Cache) findTemporal(ctx context.Context, owner, repo, period string) ([]byte, error) {
+	pattern := fmt.Sprintf("%s/%s:*:temporal:%s", owner, repo, period)
+	var cursor uint64
+	for {
+		keys, next, err := c.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("cache: scan temporal: %w", err)
+		}
+		if len(keys) > 0 {
+			data, err := c.client.Get(ctx, keys[0]).Bytes()
+			if errors.Is(err, redis.Nil) {
+				return nil, ErrCacheMiss
+			}
+			if err != nil {
+				return nil, fmt.Errorf("cache: get temporal: %w", err)
+			}
+			return data, nil
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil, ErrCacheMiss
+}
+
+func (c *Cache) SetTemporal(ctx context.Context, owner, repo, sha, period string, data []byte) error {
+	return c.client.Set(ctx, temporalKey(owner, repo, sha, period), data, TemporalAnalysisTTL).Err()
+}
+
+func (c *Cache) DeleteTemporal(ctx context.Context, owner, repo string) error {
+	pattern := fmt.Sprintf("%s/%s:*:temporal:*", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		c.client.Del(ctx, iter.Val())
+	}
+	return iter.Err()
+}
+
+func (c *Cache) GetActiveTemporalJob(ctx context.Context, owner, repo, sha string) (string, error) {
+	jobID, err := c.client.Get(ctx, activeTemporalKey(owner, repo, sha)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", ErrCacheMiss
+	}
+	if err != nil {
+		return "", fmt.Errorf("cache: get active temporal job: %w", err)
+	}
+	return jobID, nil
+}
+
+func (c *Cache) SetActiveTemporalJob(ctx context.Context, owner, repo, sha, jobID string) error {
+	return c.client.Set(ctx, activeTemporalKey(owner, repo, sha), jobID, ActiveJobTTL).Err()
+}
+
+func (c *Cache) DeleteActiveTemporalJob(ctx context.Context, owner, repo, sha string) error {
+	return c.client.Del(ctx, activeTemporalKey(owner, repo, sha)).Err()
 }
