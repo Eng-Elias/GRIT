@@ -19,6 +19,7 @@ const (
 	ComplexitySubject = "grit.jobs.complexity"
 	ChurnSubject      = "grit.jobs.churn"
 	BlameSubject      = "grit.jobs.blame"
+	TemporalSubject   = "grit.jobs.temporal"
 )
 
 type JobPayload struct {
@@ -213,6 +214,60 @@ func (p *Publisher) PublishBlame(ctx context.Context, owner, repo, sha, token st
 
 	if err := p.cache.SetActiveBlameJob(ctx, owner, repo, sha, jobID); err != nil {
 		return "", fmt.Errorf("job: store active blame job: %w", err)
+	}
+
+	return jobID, nil
+}
+
+func (p *Publisher) PublishTemporal(ctx context.Context, owner, repo, sha, token string) (string, error) {
+	existing, err := p.cache.GetActiveTemporalJob(ctx, owner, repo, sha)
+	if err == nil && existing != "" {
+		return existing, nil
+	}
+
+	jobID := uuid.New().String()
+
+	payload := JobPayload{
+		JobID: jobID,
+		Owner: owner,
+		Repo:  repo,
+		SHA:   sha,
+		Token: token,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("job: marshal temporal payload: %w", err)
+	}
+
+	msg := &nats.Msg{
+		Subject: TemporalSubject,
+		Data:    data,
+		Header:  nats.Header{},
+	}
+	msg.Header.Set("Nats-Msg-Id", fmt.Sprintf("%s/%s:%s:temporal", owner, repo, sha))
+
+	_, err = p.js.PublishMsg(msg, nats.Context(ctx))
+	if err != nil {
+		return "", fmt.Errorf("job: publish temporal: %w", err)
+	}
+
+	job := models.AnalysisJob{
+		JobID:     jobID,
+		Owner:     owner,
+		Repo:      repo,
+		SHA:       sha,
+		Status:    models.JobStatusQueued,
+		Progress:  models.NewJobProgress(),
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := p.cache.SetJob(ctx, jobID, &job); err != nil {
+		return "", fmt.Errorf("job: store temporal job state: %w", err)
+	}
+
+	if err := p.cache.SetActiveTemporalJob(ctx, owner, repo, sha, jobID); err != nil {
+		return "", fmt.Errorf("job: store active temporal job: %w", err)
 	}
 
 	return jobID, nil
