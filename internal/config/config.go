@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	Port                int
-	RedisURL            string
-	NATSURL             string
-	GitHubToken         string
-	CloneDir            string
+	Port                 int
+	RedisURL             string
+	NATSURL              string
+	GitHubToken          string
+	GeminiAPIKey         string
+	CloneDir             string
 	CloneSizeThresholdKB int64
 }
 
@@ -21,10 +22,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                8080,
-		RedisURL:            "redis://localhost:6379",
-		NATSURL:             "nats://localhost:4222",
-		CloneDir:            "/tmp/grit-clones",
+		Port:                 8080,
+		RedisURL:             "redis://localhost:6379",
+		NATSURL:              "nats://localhost:4222",
+		CloneDir:             "/tmp/grit-clones",
 		CloneSizeThresholdKB: 51200,
 	}
 
@@ -46,6 +47,10 @@ func Load() (*Config, error) {
 
 	if v := os.Getenv("GITHUB_TOKEN"); v != "" {
 		cfg.GitHubToken = v
+	}
+
+	if v := os.Getenv("GEMINI_API_KEY"); v != "" {
+		cfg.GeminiAPIKey = v
 	}
 
 	if v := os.Getenv("CLONE_DIR"); v != "" {
