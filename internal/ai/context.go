@@ -1,9 +1,15 @@
 package ai
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/grit-app/grit/internal/cache"
 	"github.com/grit-app/grit/internal/models"
 	"google.golang.org/genai"
 )
@@ -148,4 +154,128 @@ func truncateToTokens(s string, maxTokens int) string {
 		return s
 	}
 	return s[:maxChars]
+}
+
+// AssembleContext reads cached analysis data and the cloned repo to produce
+// a ContextInput, then delegates to BuildContext. cloneDir is the path to
+// the cloned repository on disk.
+func AssembleContext(ctx context.Context, c *cache.Cache, owner, repo, sha, cloneDir string) ([]*genai.Part, error) {
+	// --- Core analysis (required) ---
+	coreData, err := c.GetAnalysis(ctx, owner, repo, sha)
+	if err != nil {
+		return nil, fmt.Errorf("ai: core analysis not found: %w", err)
+	}
+	var core models.AnalysisResult
+	if err := json.Unmarshal(coreData, &core); err != nil {
+		return nil, fmt.Errorf("ai: unmarshal core analysis: %w", err)
+	}
+
+	// Build metadata string.
+	metadata := fmt.Sprintf(
+		"Name: %s\nOwner: %s\nLanguage: %s\nStars: %d\nForks: %d\nLicense: %s\nDefault Branch: %s\nTotal Files: %d\nTotal Lines: %d",
+		core.Repository.FullName,
+		core.Repository.Owner,
+		core.Metadata.PrimaryLanguage,
+		core.Metadata.Stars,
+		core.Metadata.Forks,
+		core.Metadata.LicenseName,
+		core.Repository.DefaultBranch,
+		core.TotalFiles,
+		core.TotalLines,
+	)
+
+	// Build file tree from core analysis Files.
+	var fileTree []string
+	for _, f := range core.Files {
+		fileTree = append(fileTree, f.Path)
+	}
+
+	// --- README from cloned repo ---
+	readme := readFileFromDisk(filepath.Join(cloneDir, "README.md"))
+	if readme == "" {
+		readme = readFileFromDisk(filepath.Join(cloneDir, "readme.md"))
+	}
+
+	// --- Package manifests from cloned repo ---
+	manifests := make(map[string]string)
+	for _, name := range knownManifests {
+		content := readFileFromDisk(filepath.Join(cloneDir, name))
+		if content != "" {
+			manifests[name] = content
+		}
+	}
+
+	// --- Complexity (optional — top 5 complex files) ---
+	var complexFiles []models.ComplexFileSnippet
+	complexData, err := c.GetComplexity(ctx, owner, repo, sha)
+	if err == nil {
+		var cr models.ComplexityResult
+		if json.Unmarshal(complexData, &cr) == nil && len(cr.HotFiles) > 0 {
+			hotFiles := cr.HotFiles
+			sort.Slice(hotFiles, func(i, j int) bool {
+				return hotFiles[i].Cyclomatic > hotFiles[j].Cyclomatic
+			})
+			limit := 5
+			if len(hotFiles) < limit {
+				limit = len(hotFiles)
+			}
+			for _, hf := range hotFiles[:limit] {
+				content := readFileFromDisk(filepath.Join(cloneDir, hf.Path))
+				if content != "" {
+					complexFiles = append(complexFiles, models.ComplexFileSnippet{
+						Path:       hf.Path,
+						Complexity: float64(hf.Cyclomatic),
+						Content:    content,
+					})
+				}
+			}
+		}
+	}
+
+	// --- Directory summary ---
+	dirSummary := buildDirSummary(fileTree)
+
+	input := ContextInput{
+		Metadata:     metadata,
+		FileTree:     fileTree,
+		Readme:       readme,
+		Manifests:    manifests,
+		ComplexFiles: complexFiles,
+		DirSummary:   dirSummary,
+	}
+	return BuildContext(input), nil
+}
+
+// readFileFromDisk reads a file and returns its content as a string.
+// Returns empty string on any error (file missing, unreadable, etc.).
+func readFileFromDisk(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// buildDirSummary creates a compact summary of directory structure with file counts.
+func buildDirSummary(paths []string) string {
+	dirCounts := make(map[string]int)
+	for _, p := range paths {
+		dir := filepath.ToSlash(filepath.Dir(p))
+		if dir == "." {
+			dir = "/"
+		}
+		dirCounts[dir]++
+	}
+
+	var dirs []string
+	for d := range dirCounts {
+		dirs = append(dirs, d)
+	}
+	sort.Strings(dirs)
+
+	var sb strings.Builder
+	for _, d := range dirs {
+		fmt.Fprintf(&sb, "%s (%d files)\n", d, dirCounts[d])
+	}
+	return sb.String()
 }

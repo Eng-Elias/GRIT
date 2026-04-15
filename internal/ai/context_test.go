@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -102,6 +103,47 @@ func TestBuildContext_TokenBudgetTruncatesFileTree(t *testing.T) {
 	totalTokens := len(text) / charsPerToken
 	if totalTokens > MaxTokenBudget+1000 {
 		t.Errorf("token budget exceeded: %d tokens (max %d)", totalTokens, MaxTokenBudget)
+	}
+}
+
+func TestBuildDirSummary(t *testing.T) {
+	paths := []string{"src/main.go", "src/util.go", "README.md", "cmd/app/main.go"}
+	summary := buildDirSummary(paths)
+
+	if !strings.Contains(summary, "src (2 files)") {
+		t.Error("expected src directory with 2 files")
+	}
+	if !strings.Contains(summary, "cmd/app (1 files)") {
+		t.Error("expected cmd/app directory with 1 file")
+	}
+	if !strings.Contains(summary, "/ (1 files)") {
+		t.Error("expected root directory with 1 file")
+	}
+}
+
+func TestBuildDirSummary_Empty(t *testing.T) {
+	summary := buildDirSummary(nil)
+	if summary != "" {
+		t.Errorf("expected empty summary, got %q", summary)
+	}
+}
+
+func TestReadFileFromDisk_Missing(t *testing.T) {
+	content := readFileFromDisk("/nonexistent/path/file.txt")
+	if content != "" {
+		t.Error("expected empty string for missing file")
+	}
+}
+
+func TestReadFileFromDisk_Valid(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/test.txt"
+	if err := os.WriteFile(path, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	content := readFileFromDisk(path)
+	if content != "hello" {
+		t.Errorf("expected 'hello', got %q", content)
 	}
 }
 
