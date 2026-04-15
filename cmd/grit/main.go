@@ -139,6 +139,7 @@ func main() {
 	chatRateLimiter := ai.NewRateLimiter()
 	defer chatRateLimiter.Stop()
 	aiChatHandler := handler.NewAIChatHandler(redisCache, aiClient, chatRateLimiter, cfg.CloneDir)
+	aiHealthHandler := handler.NewAIHealthHandler(redisCache, aiClient, cfg.CloneDir)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -159,6 +160,7 @@ func main() {
 		r.Get("/temporal", temporalHandler.HandleTemporal)
 		r.Post("/ai/summary", aiSummaryHandler.HandleAISummary)
 		r.Post("/ai/chat", aiChatHandler.HandleAIChat)
+		r.Get("/ai/health", aiHealthHandler.HandleAIHealth)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 
