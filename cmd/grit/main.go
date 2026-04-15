@@ -136,6 +136,9 @@ func main() {
 	contributorHandler := handler.NewContributorHandler(redisCache)
 	temporalHandler := handler.NewTemporalHandler(redisCache)
 	aiSummaryHandler := handler.NewAISummaryHandler(redisCache, aiClient, cfg.CloneDir)
+	chatRateLimiter := ai.NewRateLimiter()
+	defer chatRateLimiter.Stop()
+	aiChatHandler := handler.NewAIChatHandler(redisCache, aiClient, chatRateLimiter, cfg.CloneDir)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -155,6 +158,7 @@ func main() {
 		r.Get("/contributors/files", contributorHandler.HandleContributorFiles)
 		r.Get("/temporal", temporalHandler.HandleTemporal)
 		r.Post("/ai/summary", aiSummaryHandler.HandleAISummary)
+		r.Post("/ai/chat", aiChatHandler.HandleAIChat)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 
