@@ -15,6 +15,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/grit-app/grit/internal/ai"
 	"github.com/grit-app/grit/internal/analysis/blame"
 	"github.com/grit-app/grit/internal/analysis/churn"
 	"github.com/grit-app/grit/internal/analysis/complexity"
@@ -113,6 +114,19 @@ func main() {
 	clone.StartCleanup(ctx, cfg.CloneDir, 1*time.Hour, 10*time.Minute)
 	slog.Info("clone cleanup goroutine started")
 
+	// Initialize Gemini AI client (nil if GEMINI_API_KEY not set).
+	var aiClient *ai.Client
+	if cfg.GeminiAPIKey != "" {
+		aiClient, err = ai.NewClient(ctx, cfg.GeminiAPIKey)
+		if err != nil {
+			slog.Warn("AI features disabled", "error", err)
+		} else {
+			slog.Info("Gemini AI client initialized")
+		}
+	} else {
+		slog.Info("GEMINI_API_KEY not set, AI features disabled")
+	}
+
 	analysisHandler := handler.NewAnalysisHandler(redisCache, publisher, cfg.GitHubToken)
 	statusHandler := handler.NewStatusHandler(redisCache)
 	cacheHandler := handler.NewCacheHandler(redisCache)
@@ -121,6 +135,7 @@ func main() {
 	churnHandler := handler.NewChurnHandler(redisCache)
 	contributorHandler := handler.NewContributorHandler(redisCache)
 	temporalHandler := handler.NewTemporalHandler(redisCache)
+	aiSummaryHandler := handler.NewAISummaryHandler(redisCache, aiClient, cfg.CloneDir)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -139,6 +154,7 @@ func main() {
 		r.Get("/contributors", contributorHandler.HandleContributors)
 		r.Get("/contributors/files", contributorHandler.HandleContributorFiles)
 		r.Get("/temporal", temporalHandler.HandleTemporal)
+		r.Post("/ai/summary", aiSummaryHandler.HandleAISummary)
 		r.Delete("/cache", cacheHandler.HandleDeleteCache)
 	})
 
