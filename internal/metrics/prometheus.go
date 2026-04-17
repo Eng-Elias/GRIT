@@ -76,4 +76,15 @@ var (
 		Name: "grit_temporal_jobs_completed_total",
 		Help: "Total temporal analysis jobs completed",
 	})
+
+	AIRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "grit_ai_request_duration_seconds",
+		Help:    "AI request duration by feature",
+		Buckets: []float64{1, 3, 5, 10, 15, 30, 60, 120},
+	}, []string{"feature"})
+
+	AIRequestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "grit_ai_request_total",
+		Help: "Total AI requests by feature and status",
+	}, []string{"feature", "status"})
 )

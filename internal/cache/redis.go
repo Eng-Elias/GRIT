@@ -18,6 +18,8 @@ const (
 	ChurnAnalysisTTL       = 24 * time.Hour
 	ContributorAnalysisTTL = 48 * time.Hour
 	TemporalAnalysisTTL    = 12 * time.Hour
+	AISummaryTTL           = 1 * time.Hour
+	AIHealthTTL            = 6 * time.Hour
 	JobTTL                 = 1 * time.Hour
 	ActiveJobTTL           = 10 * time.Minute
 )
@@ -472,4 +474,87 @@ func (c *Cache) SetActiveTemporalJob(ctx context.Context, owner, repo, sha, jobI
 
 func (c *Cache) DeleteActiveTemporalJob(ctx context.Context, owner, repo, sha string) error {
 	return c.client.Del(ctx, activeTemporalKey(owner, repo, sha)).Err()
+}
+
+// --- AI Summary cache ---
+
+func aiSummaryKey(owner, repo, sha string) string {
+	return fmt.Sprintf("%s/%s:%s:ai_summary", owner, repo, sha)
+}
+
+func (c *Cache) GetAISummary(ctx context.Context, owner, repo, sha string) ([]byte, error) {
+	if sha != "" {
+		data, err := c.client.Get(ctx, aiSummaryKey(owner, repo, sha)).Bytes()
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrCacheMiss
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cache: get ai summary: %w", err)
+		}
+		return data, nil
+	}
+	// Wildcard scan when sha is empty.
+	pattern := fmt.Sprintf("%s/%s:*:ai_summary", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		data, err := c.client.Get(ctx, iter.Val()).Bytes()
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, ErrCacheMiss
+}
+
+func (c *Cache) SetAISummary(ctx context.Context, owner, repo, sha string, data []byte) error {
+	return c.client.Set(ctx, aiSummaryKey(owner, repo, sha), data, AISummaryTTL).Err()
+}
+
+func (c *Cache) DeleteAISummary(ctx context.Context, owner, repo string) error {
+	pattern := fmt.Sprintf("%s/%s:*:ai_summary", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		c.client.Del(ctx, iter.Val())
+	}
+	return iter.Err()
+}
+
+// --- AI Health cache ---
+
+func aiHealthKey(owner, repo, sha string) string {
+	return fmt.Sprintf("%s/%s:%s:ai_health", owner, repo, sha)
+}
+
+func (c *Cache) GetAIHealth(ctx context.Context, owner, repo, sha string) ([]byte, error) {
+	if sha != "" {
+		data, err := c.client.Get(ctx, aiHealthKey(owner, repo, sha)).Bytes()
+		if errors.Is(err, redis.Nil) {
+			return nil, ErrCacheMiss
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cache: get ai health: %w", err)
+		}
+		return data, nil
+	}
+	pattern := fmt.Sprintf("%s/%s:*:ai_health", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		data, err := c.client.Get(ctx, iter.Val()).Bytes()
+		if err == nil {
+			return data, nil
+		}
+	}
+	return nil, ErrCacheMiss
+}
+
+func (c *Cache) SetAIHealth(ctx context.Context, owner, repo, sha string, data []byte) error {
+	return c.client.Set(ctx, aiHealthKey(owner, repo, sha), data, AIHealthTTL).Err()
+}
+
+func (c *Cache) DeleteAIHealth(ctx context.Context, owner, repo string) error {
+	pattern := fmt.Sprintf("%s/%s:*:ai_health", owner, repo)
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		c.client.Del(ctx, iter.Val())
+	}
+	return iter.Err()
 }

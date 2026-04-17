@@ -59,6 +59,7 @@ func (h *AnalysisHandler) HandleAnalysis(w http.ResponseWriter, r *http.Request)
 		cachedData = h.embedChurnSummary(r.Context(), owner, repo, cachedData)
 		cachedData = h.embedContributorSummary(r.Context(), owner, repo, cachedData)
 		cachedData = h.embedTemporalSummary(r.Context(), owner, repo, cachedData)
+		cachedData = h.embedAISummary(r.Context(), owner, repo, cachedData)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
@@ -293,6 +294,33 @@ func (h *AnalysisHandler) embedTemporalSummary(ctx context.Context, owner, repo 
 		return coreData
 	}
 	raw["temporal_summary"] = summaryJSON
+	merged, err := json.Marshal(raw)
+	if err != nil {
+		return coreData
+	}
+	return merged
+}
+
+func (h *AnalysisHandler) embedAISummary(ctx context.Context, owner, repo string, coreData []byte) []byte {
+	summary := models.AISummarySummary{
+		Status:       "pending",
+		AISummaryURL: fmt.Sprintf("/api/%s/%s/ai/summary", owner, repo),
+	}
+
+	aiData, err := h.cache.GetAISummary(ctx, owner, repo, "")
+	if err == nil && aiData != nil {
+		summary.Status = "complete"
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(coreData, &raw) != nil {
+		return coreData
+	}
+	summaryJSON, err := json.Marshal(summary)
+	if err != nil {
+		return coreData
+	}
+	raw["ai_summary"] = summaryJSON
 	merged, err := json.Marshal(raw)
 	if err != nil {
 		return coreData
