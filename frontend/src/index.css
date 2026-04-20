@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-grit-accent: #a78bfa;
+  --color-grit-accent-dim: #7c3aed;
+  --color-grit-surface: #18181b;
+  --color-grit-surface-raised: #27272a;
+  --color-grit-border: #3f3f46;
+}
+
+html {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-300 min-h-screen;
+}
+
+#root {
+  @apply min-h-screen flex flex-col;
+}
+
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.15; }
+}
+
+.skeleton-pulse {
+  animation: pulse-skeleton 1.5s ease-in-out infinite;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
