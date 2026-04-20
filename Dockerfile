@@ -8,14 +8,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -o /grit ./cmd/grit/
+RUN CGO_ENABLED=1 GOOS=linux go build -o /app/grit ./cmd/grit/
 
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata git
 
-COPY --from=builder /grit /usr/local/bin/grit
+WORKDIR /app
+COPY --from=builder /app/grit .
 
 EXPOSE 8080
 
-ENTRYPOINT ["grit"]
+CMD ["./grit"]
