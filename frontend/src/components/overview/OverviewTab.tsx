@@ -2,6 +2,7 @@ import type { AnalysisResult } from '../../types/analysis';
 import StatsCards from './StatsCards';
 import CommitHeatmap from './CommitHeatmap';
 import HealthSignals from './HealthSignals';
+import BadgeGenerator from '../repo/BadgeGenerator';
 
 interface OverviewTabProps {
   data: AnalysisResult;
@@ -18,6 +19,9 @@ export default function OverviewTab({ data }: OverviewTabProps) {
         <div>
           <HealthSignals metadata={data.metadata} />
         </div>
+      </div>
+      <div className="mt-6">
+        <BadgeGenerator data={data} />
       </div>
     </div>
   );
